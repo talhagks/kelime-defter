@@ -106,6 +106,9 @@ textarea { resize: vertical; min-height: 92px; font-family: var(--font-read); fo
 input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .note { margin: 0; font-size: 14px; color: var(--muted); }
 .note.err { color: var(--bad); }
+.sentbox { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px 16px 14px; display: grid; gap: 4px; }
+.sentbox .sentence { margin-top: 8px; font-size: 20px; }
+.sentbox .actions { margin-top: 10px; display: flex; gap: 8px; }
 
 .list { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
 .item { border-bottom: 1px solid var(--line); }
@@ -171,14 +174,14 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         <div class="field">
           <button class="btn primary block" id="gen" type="button" disabled>Ekle</button>
           <p class="note err" id="err" hidden></p>
-          <p class="note" id="offNote" hidden>Cümleyi ve tanımı kendin yaz, sonra Ekle'ye bas.</p>
+          <p class="note" id="offNote" hidden>Tanım ve örnek cümle ücretsiz bir sözlükten gelir. Bulunamazsa kendin yazabilirsin.</p>
         </div>
       </div>
       <div id="result" hidden></div>
     </section>
 
     <section id="v-kelimeler" class="view" aria-label="Kelimeler" hidden>
-      <input id="search" type="search" placeholder="Kelime veya tanım ara" autocapitalize="none" autocomplete="off" spellcheck="false" aria-label="Ara">
+      <input id="search" type="search" placeholder="Kelime veya anlam ara" autocapitalize="none" autocomplete="off" spellcheck="false" aria-label="Ara">
       <p class="note" id="listnote"></p>
       <div id="list" class="list"></div>
     </section>
@@ -225,9 +228,10 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
 
   /* ---------- state ---------- */
-  var cards = [], loaded = false;
+  var cards = [], loaded = false, slow = false;
+  var mode = "pending", col = null;           // "db" | "local"
   var sample = null, sampleState = "pending"; // "ok" | "off"
-  var learning = new Set(), openIds = new Set();
+  var learning = new Set(), openIds = new Set(), chain = {};
   var shownId = null, revealed = false, view = "calis";
   var genBusy = false;
 
@@ -261,25 +265,38 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     return d < 30 ? d + " g" : Math.round(d / 30) + " ay";
   }
 
-  /* ---------- storage (this browser only) ---------- */
+  /* ---------- storage ---------- */
   function persistLocal() { try { localStorage.setItem(LS, JSON.stringify(cards)); } catch (e) {} }
   function put(c) {
     var i = cards.findIndex(function (x) { return x.id === c.id; });
     if (i < 0) cards.push(c); else cards[i] = c;
   }
-  function saveCard(c) { put(c); persistLocal(); refreshAll(); }
+  function queueWrite(id, fn) {
+    chain[id] = (chain[id] || Promise.resolve()).then(fn).catch(function () {
+      toast("Kaydedilemedi. Bağlantını kontrol et.");
+    });
+  }
+  function saveCard(c) {
+    put(c);
+    if (mode === "db") queueWrite(c.id, function () { return col.doc(c.id).set(c); });
+    else persistLocal();
+    refreshAll();
+  }
   function removeCard(id) {
     cards = cards.filter(function (c) { return c.id !== id; });
     learning.delete(id); openIds.delete(id);
-    persistLocal(); refreshAll();
+    if (mode === "db") queueWrite(id, function () { return col.doc(id).delete(); });
+    else persistLocal();
+    refreshAll();
   }
   function startLocal() {
+    mode = "local";
     try { cards = JSON.parse(localStorage.getItem(LS) || "[]"); } catch (e) { cards = []; }
     if (!Array.isArray(cards)) cards = [];
     loaded = true; refreshAll();
   }
 
-  /* ---------- sentence generation (only works inside claude.ai) ---------- */
+  /* ---------- sentence generation ---------- */
   async function generate(word, prev) {
     var prompt =
       "You help a learner study English vocabulary.\n" +
@@ -305,6 +322,37 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     }
   }
   var GONE = ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"];
+
+  function findUsed(sentence, word) {
+    var low = sentence.toLowerCase(), w = word.toLowerCase();
+    if (low.indexOf(w) >= 0) return word;
+    var stem = w.length > 4 ? w.slice(0, -2) : w.length > 3 ? w.slice(0, -1) : w;
+    var m = new RegExp("\\b" + stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[a-z']*", "i").exec(sentence);
+    return m ? m[0] : word;
+  }
+  async function lookupWord(word) {
+    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 8000);
+    try {
+      var res = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(word.toLowerCase()), { signal: ctl.signal });
+      if (!res.ok) return null;
+      var data = await res.json();
+      if (!Array.isArray(data)) return null;
+      var firstDef = "", out = null;
+      for (var a = 0; a < data.length && !out; a++) {
+        var ms = data[a].meanings || [];
+        for (var b = 0; b < ms.length && !out; b++) {
+          var ds = ms[b].definitions || [];
+          for (var k = 0; k < ds.length; k++) {
+            if (!ds[k].definition) continue;
+            var text = (ms[b].partOfSpeech ? "(" + ms[b].partOfSpeech + ") " : "") + ds[k].definition;
+            if (!firstDef) firstDef = text;
+            if (ds[k].example) { out = { definition: text, sentence: String(ds[k].example).trim() }; break; }
+          }
+        }
+      }
+      return out || (firstDef ? { definition: firstDef, sentence: "" } : null);
+    } finally { clearTimeout(t); }
+  }
 
   function sentenceEl(s, used, cls) {
     var p = h("p", { class: cls || "sentence" });
@@ -332,12 +380,14 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     var root = $("v-calis");
     root.replaceChildren();
     if (!loaded) {
-      root.append(h("div", { class: "card muted center" }, "Kartların yükleniyor…"));
+      root.append(h("div", { class: "card muted center" }, slow
+        ? "Kartlarına şu an ulaşılamıyor. Bağlantını kontrol et; ulaşılınca burada görünür."
+        : "Kartların yükleniyor…"));
       return;
     }
     var goAdd = h("button", { class: "btn primary", type: "button", onclick: function () { setView("ekle"); } }, "Kelime ekle");
     if (!cards.length) {
-      root.append(emptyCard("Henüz kartın yok", "Bir kelime ekle; örnek cümlesi ve İngilizce tanımıyla kart olarak çalış.", goAdd));
+      root.append(emptyCard("Henüz kartın yok", "Bir kelime yaz; örnek cümle ve İngilizce tanım kartına eklensin.", goAdd));
       return;
     }
     var q = queue();
@@ -367,12 +417,12 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
 
   /* ---------- Ekle ---------- */
-  var wordIn = $("word"), genBtn = $("gen"), sentIn = $("sentEdit"), defIn = $("defEdit"), lastId = null;
+  var wordIn = $("word"), genBtn = $("gen"), sentIn = $("sentEdit"), defIn = $("defEdit"), lastId = null, needManual = false;
 
   function updateAdd() {
     var off = sampleState === "off", w = wordIn.value.trim();
-    $("manual").hidden = !off; $("offNote").hidden = !off;
-    var ready = off ? !!(w && sentIn.value.trim() && defIn.value.trim()) : !!(w && sampleState === "ok");
+    $("manual").hidden = !(off && needManual); $("offNote").hidden = !off;
+    var ready = off ? !!w : !!(w && sampleState === "ok");
     genBtn.disabled = genBusy || !ready;
     genBtn.textContent = genBusy ? "Hazırlanıyor…" : "Ekle";
     var dup = w && cards.find(function (c) { return c.word.toLowerCase() === w.toLowerCase(); });
@@ -393,9 +443,26 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     showErr("");
     if (sampleState === "off") {
       var s = sentIn.value.trim(), d = defIn.value.trim();
-      if (!s || !d) return;
-      addCard(w, { sentence: s, used: w, definition: d });
-      wordIn.value = ""; sentIn.value = ""; defIn.value = "";
+      if (!s || !d) {
+        genBusy = true; updateAdd();
+        var found = null;
+        try { found = await lookupWord(w); } catch (e) { found = null; }
+        genBusy = false;
+        var fs = s || (found && found.sentence) || "", fd = d || (found && found.definition) || "";
+        if (fs && fd) {
+          addCard(w, { sentence: fs, used: findUsed(fs, w), definition: fd });
+          wordIn.value = ""; sentIn.value = ""; defIn.value = ""; needManual = false;
+        } else {
+          needManual = true;
+          if (fd) defIn.value = fd;
+          showErr(fd ? "Bu kelime için örnek cümle bulunamadı. Cümleyi kendin yaz, sonra Ekle'ye bas."
+                     : "Sözlükte bulunamadı. Cümleyi ve tanımı kendin yazıp Ekle'ye bas.");
+        }
+        updateAdd();
+        return;
+      }
+      addCard(w, { sentence: s, used: findUsed(s, w), definition: d });
+      wordIn.value = ""; sentIn.value = ""; defIn.value = ""; needManual = false;
       updateAdd();
       return;
     }
@@ -480,7 +547,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     var items = cards.filter(function (c) {
       return !qv || c.word.toLowerCase().indexOf(qv) >= 0 || c.meaning.toLowerCase().indexOf(qv) >= 0;
     }).sort(function (a, b) { return b.created - a.created; });
-    var note = cards.length ? cards.length + " kelime · Kartlar yalnızca bu tarayıcıda saklanıyor." : "";
+    var note = cards.length ? cards.length + " kelime" : "";
+    if (mode === "local") note += (note ? " · " : "") + "Kartlar yalnızca bu tarayıcıda saklanıyor.";
     $("listnote").textContent = note;
     root.hidden = !items.length && !cards.length;
     root.replaceChildren.apply(root, items.length ? items.map(itemEl)
@@ -525,10 +593,33 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       sample = fn; sampleState = fn ? "ok" : "off";
     }, function () { sampleState = "off"; }).then(function () { updateAdd(); updateList(); renderResult(); });
   }
+  async function initStore() {
+    var c = window.claude;
+    if (!c || !c.use) { startLocal(); return; }
+    var timer = setTimeout(function () { slow = true; if (!loaded) updateStudy(); }, 10000);
+    var uid = null, db = null;
+    try {
+      var user = await c.use("user");
+      uid = user ? await user.id() : null;
+      db = uid ? await c.use("db") : null;
+    } catch (e) { db = null; }
+    if (!db) { clearTimeout(timer); startLocal(); return; }
+    mode = "db"; col = db.collection("data/users/" + uid);
+    var unsub = col.onSnapshot(function (snap) {
+      clearTimeout(timer); slow = false;
+      cards = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      loaded = true; refreshAll();
+    }, function () {
+      clearTimeout(timer);
+      try { unsub(); } catch (e) {}
+      startLocal();
+    });
+  }
 
   setView((location.hash || "").slice(1) || "calis", true);
-  startLocal();
+  refreshAll();
   initSample();
+  initStore();
 })();
 </script>
 </body>
