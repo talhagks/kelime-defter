@@ -130,7 +130,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
   background: var(--surface); border-top: 1px solid var(--line);
   padding-top: 6px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -155,6 +155,11 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .out { color: var(--accent); font-weight: 600; }
 .ctl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .ctlbtn { min-height: 44px; border-radius: 12px; border: 1.5px solid var(--line); background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; }
+#gBody { min-height: 150px; }
+.gbtns { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.gbtns.edit { grid-template-columns: 2fr 1fr; }
+.gbody { margin: 0; font: 400 18px/1.6 var(--font-read); white-space: pre-wrap; overflow-wrap: anywhere; }
+.gprev { font-size: 14px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -222,6 +227,25 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       <p class="note" id="listnote"></p>
       <div id="list" class="list"></div>
     </section>
+    <section id="v-grammar" class="view" aria-label="Grammar" hidden>
+      <div class="card form">
+        <div class="field">
+          <label class="label" for="gTitle">Konu</label>
+          <input id="gTitle" type="text" placeholder="ör. Present Perfect" autocapitalize="sentences" autocomplete="off" spellcheck="false" enterkeyhint="next">
+        </div>
+        <div class="field">
+          <label class="label" for="gBody">Notların</label>
+          <textarea id="gBody" rows="6" placeholder="Kuralı, örnek cümleleri, istisnaları yaz…" autocapitalize="sentences" spellcheck="true"></textarea>
+        </div>
+        <div class="gbtns" id="gBtns">
+          <button class="btn primary" id="gSave" type="button" disabled>Kaydet</button>
+          <button class="btn ghost" id="gCancel" type="button" hidden>Vazgeç</button>
+        </div>
+      </div>
+      <input id="gSearch" type="search" placeholder="Notlarda ara" autocapitalize="none" autocomplete="off" spellcheck="false" aria-label="Grammar notlarında ara">
+      <p class="note" id="gNote"></p>
+      <div id="gList" class="list"></div>
+    </section>
   </main>
 </div>
 
@@ -241,6 +265,10 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   <button class="tab" data-view="kelimeler" type="button">
     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7h11M8 12h11M8 17h11"/><path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></svg>
     <span>Kelimeler</span>
+  </button>
+  <button class="tab" data-view="grammar" type="button">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v14H6.5A1.5 1.5 0 0 0 5 19.5v-14z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 8.5h6M9 12h4"/></svg>
+    <span>Grammar</span>
   </button>
 </nav>
 <div id="toast" role="status" hidden></div>
@@ -661,12 +689,84 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       if (!$("ygBox").hidden) ygSearch();
     });
   });
+
   document.querySelectorAll(".ctlbtn").forEach(function (b) {
     b.addEventListener("click", function () {
       var act = b.dataset.act;
       try { if (ygWidget && typeof ygWidget[act] === "function") ygWidget[act](); } catch (e) {}
     });
   });
+
+  /* ---------- Grammar ---------- */
+  var LSG = "kelime-defteri-grammar-v1", gNotes = [], gEditId = null, gOpen = new Set();
+  try { gNotes = JSON.parse(localStorage.getItem(LSG) || "[]"); } catch (e) { gNotes = []; }
+  if (!Array.isArray(gNotes)) gNotes = [];
+  var gTitle = $("gTitle"), gBody = $("gBody"), gSave = $("gSave"), gCancel = $("gCancel");
+
+  function gPersist() { try { localStorage.setItem(LSG, JSON.stringify(gNotes)); } catch (e) { toast("Not kaydedilemedi."); } }
+  function gUpdateBtn() {
+    gSave.disabled = !(gTitle.value.trim() && gBody.value.trim());
+    gSave.textContent = gEditId ? "Güncelle" : "Kaydet";
+    gCancel.hidden = !gEditId;
+    $("gBtns").className = gEditId ? "gbtns edit" : "gbtns";
+  }
+  function gReset() { gEditId = null; gTitle.value = ""; gBody.value = ""; gUpdateBtn(); }
+  function gSaveNote() {
+    var t = gTitle.value.trim(), b = gBody.value.trim(), now = Date.now();
+    if (!t || !b) return;
+    if (gEditId) {
+      gNotes = gNotes.map(function (n) { return n.id === gEditId ? Object.assign({}, n, { title: t, body: b, updated: now }) : n; });
+      toast("Not güncellendi");
+    } else {
+      gNotes.push({ id: newId(), title: t, body: b, created: now, updated: now });
+      toast("Not eklendi");
+    }
+    gPersist(); gReset(); gRender();
+  }
+  function gItem(n) {
+    var d = h("details", { class: "item", open: gOpen.has(n.id) });
+    d.addEventListener("toggle", function () { if (d.open) gOpen.add(n.id); else gOpen.delete(n.id); });
+    var first = n.body.split("\n")[0];
+    d.append(h("summary", {}, h("div", { class: "sum" }, h("b", {}, n.title), h("span", { class: "muted ell gprev" }, first))));
+    var edit = h("button", { class: "btn ghost small", type: "button" }, "Düzenle");
+    edit.addEventListener("click", function () {
+      gEditId = n.id; gTitle.value = n.title; gBody.value = n.body; gUpdateBtn();
+      window.scrollTo(0, 0); toast("Düzenleme modu");
+    });
+    var del = h("button", { class: "btn ghost small danger", type: "button" }, "Sil");
+    var armed = false, tm;
+    del.addEventListener("click", function () {
+      if (!armed) {
+        armed = true; del.textContent = "Emin misin? Sil";
+        tm = setTimeout(function () { armed = false; del.textContent = "Sil"; }, 3500);
+      } else {
+        clearTimeout(tm);
+        gNotes = gNotes.filter(function (x) { return x.id !== n.id; });
+        gOpen.delete(n.id);
+        if (gEditId === n.id) gReset();
+        gPersist(); gRender();
+      }
+    });
+    d.append(h("div", { class: "detail" }, h("p", { class: "gbody" }, n.body), h("div", { class: "row" }, edit, del)));
+    return d;
+  }
+  function gRender() {
+    var root = $("gList"), qv = $("gSearch").value.trim().toLowerCase();
+    var items = gNotes.filter(function (n) {
+      return !qv || n.title.toLowerCase().indexOf(qv) >= 0 || n.body.toLowerCase().indexOf(qv) >= 0;
+    }).sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
+    $("gNote").textContent = gNotes.length
+      ? gNotes.length + " not · Notlar yalnızca bu tarayıcıda saklanıyor."
+      : "Henüz notun yok. Yukarıya ilk grammar notunu yaz.";
+    root.hidden = !gNotes.length;
+    root.replaceChildren.apply(root, items.length ? items.map(gItem)
+      : gNotes.length ? [h("div", { class: "empty muted" }, "Eşleşen not yok.")] : []);
+  }
+  gSave.addEventListener("click", gSaveNote);
+  gCancel.addEventListener("click", gReset);
+  gTitle.addEventListener("input", gUpdateBtn);
+  gBody.addEventListener("input", gUpdateBtn);
+  $("gSearch").addEventListener("input", gRender);
 
   /* ---------- shell ---------- */
   function updateHeader() {
@@ -676,7 +776,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
   function refreshAll() { updateHeader(); updateStudy(); updateList(); updateAdd(); renderResult(); ygChips(); }
 
-  var VIEWS = ["telaffuz", "calis", "ekle", "kelimeler"];
+  var VIEWS = ["telaffuz", "calis", "ekle", "kelimeler", "grammar"];
   function setView(v, fromHash) {
     if (VIEWS.indexOf(v) < 0) v = "calis";
     view = v;
@@ -686,6 +786,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     });
     if (v === "calis") updateStudy();
     if (v === "kelimeler") updateList();
+    if (v === "grammar") gRender();
     if (!fromHash) { try { if (location.hash.slice(1) !== v) location.hash = v; } catch (e) {} }
     window.scrollTo(0, 0);
   }
@@ -730,6 +831,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 
   setView((location.hash || "").slice(1) || "calis", true);
   refreshAll();
+  gUpdateBtn();
+  gRender();
   initSample();
   initStore();
 })();
