@@ -130,7 +130,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
   background: var(--surface); border-top: 1px solid var(--line);
   padding-top: 6px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -145,6 +145,14 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .added .defn { margin-top: 12px; }
 .added .row { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
 #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 6; max-width: calc(100% - 32px); padding: 11px 18px; border-radius: 999px; background: var(--ink); color: var(--bg); font-size: 15px; font-weight: 500; text-align: center; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 12px; background: var(--soft); }
+.segbtn { min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-size: 15px; font-weight: 600; cursor: pointer; }
+.segbtn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .15); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.wchip { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--line); background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; }
+.ygbox { padding: 12px; overflow: hidden; display: grid; gap: 10px; }
+#yg-widget { min-height: 40px; max-width: 100%; overflow: hidden; }
+.out { color: var(--accent); font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -156,6 +164,28 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   </header>
 
   <main>
+    <section id="v-telaffuz" class="view" aria-label="Telaffuz" hidden>
+      <div class="card form">
+        <div class="field">
+          <label class="label" for="ygWord">Kelime</label>
+          <input id="ygWord" type="text" placeholder="ör. see" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+          <p class="note">Kelimenin gerçek konuşmalarda nasıl söylendiğini YouGlish videolarından dinle.</p>
+        </div>
+        <div class="seg" role="group" aria-label="Aksan">
+          <button class="segbtn" type="button" data-accent="" aria-pressed="true">Hepsi</button>
+          <button class="segbtn" type="button" data-accent="us" aria-pressed="false">ABD</button>
+          <button class="segbtn" type="button" data-accent="uk" aria-pressed="false">İngiltere</button>
+        </div>
+        <button class="btn primary block" id="ygGo" type="button" disabled>Dinle</button>
+        <div class="chips" id="ygChips" hidden></div>
+      </div>
+      <div class="card ygbox" id="ygBox" hidden>
+        <div id="yg-widget"></div>
+        <p class="note" id="ygNote"></p>
+        <a class="out" id="ygLink" href="https://youglish.com" target="_blank" rel="noopener noreferrer">YouGlish'te aç</a>
+      </div>
+    </section>
+
     <section id="v-calis" class="view" aria-label="Çalış"></section>
 
     <section id="v-ekle" class="view" aria-label="Yeni kelime" hidden>
@@ -189,6 +219,10 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 </div>
 
 <nav class="tabs" aria-label="Bölümler">
+  <button class="tab" data-view="telaffuz" type="button">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 10v4h3l4 3.5v-11L8 10H5z"/><path d="M16 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10"/></svg>
+    <span>Telaffuz</span>
+  </button>
   <button class="tab" data-view="calis" type="button">
     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M8 10h8M8 14h5"/></svg>
     <span>Çalış</span>
@@ -556,15 +590,79 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
   $("search").addEventListener("input", updateList);
 
+  /* ---------- Telaffuz (YouGlish) ---------- */
+  var ygIn = $("ygWord"), ygGo = $("ygGo"), ygWidget = null, ygState = "idle", ygAccent = "";
+
+  function ygUpdate() { ygGo.disabled = !ygIn.value.trim(); }
+  function ygChips() {
+    var root = $("ygChips");
+    var words = cards.slice().sort(function (a, b) { return b.created - a.created; }).slice(0, 12);
+    root.hidden = !words.length;
+    root.replaceChildren.apply(root, words.map(function (c) {
+      return h("button", { class: "wchip", type: "button", onclick: function () { ygIn.value = c.word; ygUpdate(); ygSearch(); } }, c.word);
+    }));
+  }
+  function ygLoad(cb) {
+    if (window.YG && window.YG.Widget) { cb(true); return; }
+    var done = false;
+    function finish(ok) { if (!done) { done = true; cb(ok); } }
+    window.onYouglishAPIReady = function () { finish(true); };
+    var sc = document.createElement("script");
+    sc.src = "https://youglish.com/public/emb/widget.js"; sc.async = true; sc.charset = "utf-8";
+    sc.onerror = function () { finish(false); };
+    document.head.appendChild(sc);
+    setTimeout(function () { finish(!!(window.YG && window.YG.Widget)); }, 10000);
+  }
+  function ygDone(ev) { $("ygNote").textContent = ev && ev.totalResults === 0 ? "Bu kelime için sonuç bulunamadı." : ""; }
+  function ygErr() { $("ygNote").textContent = "Video açılamadı. Aşağıdaki bağlantıdan YouGlish'te aç."; }
+  function ygFetch() {
+    var q = ygIn.value.trim();
+    if (!q || !ygWidget) return;
+    $("ygNote").textContent = "Yükleniyor…";
+    try {
+      if (ygAccent) ygWidget.fetch(q, "english", ygAccent); else ygWidget.fetch(q, "english");
+    } catch (e) { ygErr(); }
+  }
+  function ygSearch() {
+    var q = ygIn.value.trim();
+    if (!q) return;
+    $("ygBox").hidden = false;
+    $("ygLink").href = "https://youglish.com/pronounce/" + encodeURIComponent(q) + "/english";
+    $("ygNote").textContent = "Yükleniyor…";
+    if (ygState === "loading") return;
+    if (!ygWidget) {
+      ygState = "loading";
+      ygLoad(function (ok) {
+        if (!ok) { ygState = "idle"; ygErr(); return; }
+        ygState = "ready";
+        var wd = Math.max(240, Math.min(560, $("ygBox").clientWidth - 24));
+        ygWidget = new window.YG.Widget("yg-widget", { width: wd, components: 8, events: { onFetchDone: ygDone, onError: ygErr } });
+        ygFetch();
+      });
+      return;
+    }
+    ygFetch();
+  }
+  ygGo.addEventListener("click", ygSearch);
+  ygIn.addEventListener("input", ygUpdate);
+  ygIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); ygSearch(); } });
+  document.querySelectorAll(".segbtn").forEach(function (b) {
+    b.addEventListener("click", function () {
+      ygAccent = b.dataset.accent || "";
+      document.querySelectorAll(".segbtn").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      if (!$("ygBox").hidden) ygSearch();
+    });
+  });
+
   /* ---------- shell ---------- */
   function updateHeader() {
     var now = Date.now();
     var n = cards.filter(function (c) { return c.due <= now; }).length;
     $("count").textContent = loaded && cards.length ? n + " bekliyor" : "";
   }
-  function refreshAll() { updateHeader(); updateStudy(); updateList(); updateAdd(); renderResult(); }
+  function refreshAll() { updateHeader(); updateStudy(); updateList(); updateAdd(); renderResult(); ygChips(); }
 
-  var VIEWS = ["calis", "ekle", "kelimeler"];
+  var VIEWS = ["telaffuz", "calis", "ekle", "kelimeler"];
   function setView(v, fromHash) {
     if (VIEWS.indexOf(v) < 0) v = "calis";
     view = v;
