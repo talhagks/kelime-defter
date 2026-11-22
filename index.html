@@ -153,6 +153,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .ygbox { padding: 12px; overflow: hidden; display: grid; gap: 10px; }
 #yg-widget { min-height: 40px; max-width: 100%; overflow: hidden; }
 .out { color: var(--accent); font-weight: 600; }
+.ctl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ctlbtn { min-height: 44px; border-radius: 12px; border: 1.5px solid var(--line); background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -181,6 +183,11 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       </div>
       <div class="card ygbox" id="ygBox" hidden>
         <div id="yg-widget"></div>
+        <div class="ctl" id="ygCtl" role="group" aria-label="Video kontrolleri" hidden>
+          <button class="ctlbtn" type="button" data-act="previous">‹ Önceki</button>
+          <button class="ctlbtn" type="button" data-act="next">Sonraki ›</button>
+          <button class="ctlbtn" type="button" data-act="replay">↺ Tekrar</button>
+        </div>
         <p class="note" id="ygNote"></p>
         <a class="out" id="ygLink" href="https://youglish.com" target="_blank" rel="noopener noreferrer">YouGlish'te aç</a>
       </div>
@@ -619,6 +626,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     var q = ygIn.value.trim();
     if (!q || !ygWidget) return;
     $("ygNote").textContent = "Yükleniyor…";
+    $("ygCtl").hidden = false;
     try {
       if (ygAccent) ygWidget.fetch(q, "english", ygAccent); else ygWidget.fetch(q, "english");
     } catch (e) { ygErr(); }
@@ -636,7 +644,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         if (!ok) { ygState = "idle"; ygErr(); return; }
         ygState = "ready";
         var wd = Math.max(240, Math.min(560, $("ygBox").clientWidth - 24));
-        ygWidget = new window.YG.Widget("yg-widget", { width: wd, components: 8, events: { onFetchDone: ygDone, onError: ygErr } });
+        ygWidget = new window.YG.Widget("yg-widget", { width: wd, events: { onFetchDone: ygDone, onError: ygErr } });
         ygFetch();
       });
       return;
@@ -651,6 +659,12 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       ygAccent = b.dataset.accent || "";
       document.querySelectorAll(".segbtn").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
       if (!$("ygBox").hidden) ygSearch();
+    });
+  });
+  document.querySelectorAll(".ctlbtn").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var act = b.dataset.act;
+      try { if (ygWidget && typeof ygWidget[act] === "function") ygWidget[act](); } catch (e) {}
     });
   });
 
