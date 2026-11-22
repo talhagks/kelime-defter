@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Kelime Defteri</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap">
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+[hidden] { display: none !important; }
+</style>
+<style>
+:root {
+  --bg: #edf0f5;
+  --surface: #ffffff;
+  --soft: #e3e8f1;
+  --ink: #11172b;
+  --muted: #566078;
+  --line: #d3d9e5;
+  --accent: #3347e0;
+  --accent-ink: #ffffff;
+  --mark: #ffe45c;
+  --good: #1b7f52;
+  --warn: #a85f00;
+  --bad: #c23636;
+  --font-display: "Bricolage Grotesque", ui-rounded, system-ui, sans-serif;
+  --font-body: "Inter", -apple-system, system-ui, sans-serif;
+  --font-read: "Source Serif 4", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1120; --surface: #171d33; --soft: #222a47; --ink: #eef1fa; --muted: #9aa3bd;
+    --line: #2a3150; --accent: #8c9bff; --accent-ink: #0d1120; --mark: rgba(255, 214, 64, .34);
+    --good: #4cc38a; --warn: #f0b34a; --bad: #ff8080;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1120; --surface: #171d33; --soft: #222a47; --ink: #eef1fa; --muted: #9aa3bd;
+  --line: #2a3150; --accent: #8c9bff; --accent-ink: #0d1120; --mark: rgba(255, 214, 64, .34);
+  --good: #4cc38a; --warn: #f0b34a; --bad: #ff8080;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 calc(96px + env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 540px; margin: 0 auto; }
+button, input, textarea { font-family: inherit; color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-block: 20px 14px; }
+.top h1 { margin: 0; font: 700 26px/1.1 var(--font-display); letter-spacing: -.02em; }
+.top .count { font-size: 14px; font-weight: 600; color: var(--muted); }
+
+.view { display: grid; gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; min-width: 0; }
+.muted { color: var(--muted); }
+.center { text-align: center; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.meta { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+
+.word { margin: 10px 0 0; font: 700 clamp(34px, 10vw, 46px)/1.05 var(--font-display); letter-spacing: -.02em; overflow-wrap: anywhere; }
+.sentence { margin: 16px 0 0; font: 400 21px/1.5 var(--font-read); overflow-wrap: anywhere; }
+mark {
+  background: linear-gradient(transparent 52%, var(--mark) 52%);
+  color: inherit; padding: 0 .08em; border-radius: 2px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.back { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.meaning { margin: 6px 0 0; font: 600 22px/1.35 var(--font-display); color: var(--accent); overflow-wrap: anywhere; }
+
+.btn { min-height: 52px; padding: 0 18px; border-radius: 14px; border: 1.5px solid transparent; font-size: 17px; font-weight: 600; cursor: pointer; }
+.btn.block { width: 100%; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--ink); }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.small { min-height: 44px; font-size: 15px; padding: 0 14px; }
+
+.rates { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.rate { display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 64px; padding: 8px 2px; border-radius: 14px; border: 1.5px solid currentColor; background: var(--surface); font-size: 16px; font-weight: 600; cursor: pointer; }
+.rate small { font-size: 12px; font-weight: 500; opacity: .85; }
+.rate.again { color: var(--bad); }
+.rate.hard { color: var(--warn); }
+.rate.good { color: var(--accent); }
+.rate.easy { color: var(--good); }
+
+.form { display: grid; gap: 18px; }
+.field { display: grid; gap: 7px; }
+input[type="text"], input[type="search"], textarea {
+  width: 100%; font-size: 17px; line-height: 1.4; padding: 13px 14px; border-radius: 12px;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+}
+textarea { resize: vertical; min-height: 92px; font-family: var(--font-read); font-size: 18px; }
+input:focus, textarea:focus { border-color: var(--accent); outline: none; }
+.note { margin: 0; font-size: 14px; color: var(--muted); }
+.note.err { color: var(--bad); }
+
+.list { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.item { border-bottom: 1px solid var(--line); }
+.item:last-child { border-bottom: 0; }
+.item summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; padding: 10px 16px; cursor: pointer; }
+.item summary::-webkit-details-marker { display: none; }
+.sum { display: grid; min-width: 0; }
+.sum b { font: 600 19px/1.2 var(--font-display); overflow-wrap: anywhere; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.chip { flex: none; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+.chip.due { background: var(--accent); color: var(--accent-ink); }
+.chip.new { background: var(--mark); color: var(--ink); }
+.detail { display: grid; gap: 12px; padding: 2px 16px 18px; }
+.detail .sentence { margin: 0; font-size: 19px; }
+.detail .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.empty { padding: 26px 20px; }
+.empty h2 { margin: 0 0 6px; font: 700 22px/1.2 var(--font-display); }
+.empty p { margin: 0 0 16px; color: var(--muted); }
+
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-top: 6px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+}
+.tab { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 4px 0; background: none; border: 0; border-radius: 12px; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.tab[aria-current="page"] { color: var(--accent); }
+
+.defn { margin: 0; font-weight: 500; color: var(--accent); overflow-wrap: anywhere; }
+.added .word { font-size: 30px; }
+.added .defn { margin-top: 12px; }
+.added .row { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 6; max-width: calc(100% - 32px); padding: 11px 18px; border-radius: 999px; background: var(--ink); color: var(--bg); font-size: 15px; font-weight: 500; text-align: center; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Kelime Defteri</h1>
+    <span class="count" id="count"></span>
+  </header>
+
+  <main>
+    <section id="v-calis" class="view" aria-label="Çalış"></section>
+
+    <section id="v-ekle" class="view" aria-label="Yeni kelime" hidden>
+      <div class="card form">
+        <div class="field">
+          <label class="label" for="word">İngilizce kelime</label>
+          <input id="word" type="text" placeholder="ör. see" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+          <p class="note" id="dup" hidden></p>
+        </div>
+        <div class="field" id="manual" hidden>
+          <span class="label">Örnek cümle</span>
+          <textarea id="sentEdit" rows="3" aria-label="Örnek cümle" autocapitalize="sentences" spellcheck="true"></textarea>
+          <span class="label">Tanım (İngilizce)</span>
+          <textarea id="defEdit" rows="2" aria-label="Tanım" autocapitalize="sentences" spellcheck="true"></textarea>
+        </div>
+        <div class="field">
+          <button class="btn primary block" id="gen" type="button" disabled>Ekle</button>
+          <p class="note err" id="err" hidden></p>
+          <p class="note" id="offNote" hidden>Cümleyi ve tanımı kendin yaz, sonra Ekle'ye bas.</p>
+        </div>
+      </div>
+      <div id="result" hidden></div>
+    </section>
+
+    <section id="v-kelimeler" class="view" aria-label="Kelimeler" hidden>
+      <input id="search" type="search" placeholder="Kelime veya tanım ara" autocapitalize="none" autocomplete="off" spellcheck="false" aria-label="Ara">
+      <p class="note" id="listnote"></p>
+      <div id="list" class="list"></div>
+    </section>
+  </main>
+</div>
+
+<nav class="tabs" aria-label="Bölümler">
+  <button class="tab" data-view="calis" type="button">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M8 10h8M8 14h5"/></svg>
+    <span>Çalış</span>
+  </button>
+  <button class="tab" data-view="ekle" type="button">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg>
+    <span>Ekle</span>
+  </button>
+  <button class="tab" data-view="kelimeler" type="button">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7h11M8 12h11M8 17h11"/><path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></svg>
+    <span>Kelimeler</span>
+  </button>
+</nav>
+<div id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  var LS = "kelime-defteri-v1", DAY = 864e5, MIN = 6e4, HR = 36e5;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function h(tag, props) {
+    var e = document.createElement(tag);
+    props = props || {};
+    Object.keys(props).forEach(function (a) {
+      var v = props[a];
+      if (a === "class") e.className = v;
+      else if (a.slice(0, 2) === "on") e.addEventListener(a.slice(2), v);
+      else if (v === true) e.setAttribute(a, "");
+      else if (v !== false && v != null) e.setAttribute(a, v);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var kids = [].concat(arguments[i]);
+      kids.forEach(function (k) { if (k != null && k !== false) e.append(k); });
+    }
+    return e;
+  }
+
+  /* ---------- state ---------- */
+  var cards = [], loaded = false;
+  var sample = null, sampleState = "pending"; // "ok" | "off"
+  var learning = new Set(), openIds = new Set();
+  var shownId = null, revealed = false, view = "calis";
+  var genBusy = false;
+
+  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  var toastTimer;
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 2800);
+  }
+
+  /* ---------- scheduling (simple SM-2 variant) ---------- */
+  function nextState(c, q) {
+    var n = Object.assign({}, c), now = Date.now(), ease = c.ease || 2.5, iv = c.interval || 1, days;
+    n.reviews = (c.reviews || 0) + 1;
+    if (q === "again") {
+      n.lapses = (c.lapses || 0) + 1; n.ease = Math.max(1.3, ease - 0.2);
+      n.reps = 0; n.interval = 0; n.due = now + 10 * MIN; return n;
+    }
+    if (q === "hard") { days = c.reps > 0 ? Math.max(1, iv * 1.2) : 1; n.ease = Math.max(1.3, ease - 0.15); }
+    else if (q === "good") { days = c.reps === 0 ? 1 : c.reps === 1 ? 3 : Math.max(1, iv * ease); }
+    else { days = c.reps === 0 ? 3 : c.reps === 1 ? 6 : Math.max(1, iv * ease * 1.3); n.ease = ease + 0.15; }
+    n.reps = (c.reps || 0) + 1; n.interval = days; n.due = now + Math.round(days * DAY);
+    return n;
+  }
+  function fmt(ms) {
+    var m = Math.round(ms / MIN);
+    if (m < 60) return Math.max(1, m) + " dk";
+    var hr = Math.round(ms / HR);
+    if (hr < 24) return hr + " sa";
+    var d = Math.round(ms / DAY);
+    return d < 30 ? d + " g" : Math.round(d / 30) + " ay";
+  }
+
+  /* ---------- storage (this browser only) ---------- */
+  function persistLocal() { try { localStorage.setItem(LS, JSON.stringify(cards)); } catch (e) {} }
+  function put(c) {
+    var i = cards.findIndex(function (x) { return x.id === c.id; });
+    if (i < 0) cards.push(c); else cards[i] = c;
+  }
+  function saveCard(c) { put(c); persistLocal(); refreshAll(); }
+  function removeCard(id) {
+    cards = cards.filter(function (c) { return c.id !== id; });
+    learning.delete(id); openIds.delete(id);
+    persistLocal(); refreshAll();
+  }
+  function startLocal() {
+    try { cards = JSON.parse(localStorage.getItem(LS) || "[]"); } catch (e) { cards = []; }
+    if (!Array.isArray(cards)) cards = [];
+    loaded = true; refreshAll();
+  }
+
+  /* ---------- sentence generation (only works inside claude.ai) ---------- */
+  async function generate(word, prev) {
+    var prompt =
+      "You help a learner study English vocabulary.\n" +
+      "For the English word or phrase \"" + word + "\", write:\n" +
+      "1. ONE natural example sentence: 8 to 16 words, everyday context, intermediate (B1-B2) level, with a context that makes the meaning clear. Use the word in whatever natural form fits (for example \"saw\" for \"see\").\n" +
+      "2. A short definition in simple English (one line, English only) for the sense used in the sentence, starting with the part of speech in parentheses, like \"(verb) to notice something with your eyes\".\n" +
+      (prev ? "Do not reuse this sentence: \"" + prev + "\".\n" : "") +
+      "If the input is not a real English word or phrase, set \"error\" to \"not_english\" and leave the other fields empty.\n" +
+      "Reply with only JSON: {\"sentence\": \"...\", \"used\": \"the exact form of the word as it appears in the sentence\", \"definition\": \"...\", \"error\": null}";
+    var r = await sample.json(prompt, { modelTier: "quick", cache: false });
+    if (r && r.error) throw { code: "not_english" };
+    if (!r || typeof r.sentence !== "string" || !r.sentence.trim() || typeof r.definition !== "string" || !r.definition.trim()) throw { code: "upstream_error" };
+    return { sentence: r.sentence.trim(), used: (typeof r.used === "string" && r.used.trim()) || word, definition: r.definition.trim() };
+  }
+  function genError(e) {
+    switch (e && e.code) {
+      case "not_english": return "Bu İngilizce bir kelimeye benzemiyor. Yazımı kontrol et.";
+      case "rate_limited": return "Çok sık denendi. Biraz bekleyip tekrar dene.";
+      case "session_expired": return "Oturumun dolmuş. claude.ai'de yeniden giriş yap.";
+      case "refused": return "Bu kelime için cümle üretilemedi.";
+      case "cancelled": return "";
+      default: return "Cümle üretilemedi. Tekrar dene.";
+    }
+  }
+  var GONE = ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"];
+
+  function sentenceEl(s, used, cls) {
+    var p = h("p", { class: cls || "sentence" });
+    var i = used ? s.toLowerCase().indexOf(used.toLowerCase()) : -1;
+    if (i < 0) { p.textContent = s; return p; }
+    p.append(s.slice(0, i), h("mark", {}, s.slice(i, i + used.length)), s.slice(i + used.length));
+    return p;
+  }
+
+  /* ---------- Çalış ---------- */
+  function queue() {
+    var now = Date.now();
+    return cards.filter(function (c) { return c.due <= now || learning.has(c.id); })
+      .sort(function (a, b) { return (learning.has(a.id) - learning.has(b.id)) || (a.due - b.due); });
+  }
+  function rate(c, k) {
+    if (k === "again") learning.add(c.id); else learning.delete(c.id);
+    revealed = false;
+    saveCard(nextState(c, k));
+  }
+  function emptyCard(title, text, btn) {
+    return h("div", { class: "card empty" }, h("h2", {}, title), h("p", {}, text), btn);
+  }
+  function updateStudy() {
+    var root = $("v-calis");
+    root.replaceChildren();
+    if (!loaded) {
+      root.append(h("div", { class: "card muted center" }, "Kartların yükleniyor…"));
+      return;
+    }
+    var goAdd = h("button", { class: "btn primary", type: "button", onclick: function () { setView("ekle"); } }, "Kelime ekle");
+    if (!cards.length) {
+      root.append(emptyCard("Henüz kartın yok", "Bir kelime ekle; örnek cümlesi ve İngilizce tanımıyla kart olarak çalış.", goAdd));
+      return;
+    }
+    var q = queue();
+    if (!q.length) {
+      var now = Date.now();
+      var next = cards.map(function (c) { return c.due; }).sort(function (a, b) { return a - b; })[0];
+      root.append(emptyCard("Bugünlük bu kadar", "Sonraki kart " + fmt(next - now) + " sonra hazır.", goAdd));
+      return;
+    }
+    var c = q[0];
+    if (shownId !== c.id) { shownId = c.id; revealed = false; }
+    var card = h("article", { class: "card" },
+      h("div", { class: "meta" }, h("span", { class: "label" }, "Kelime"), h("span", { class: "muted" }, q.length + " kart kaldı")),
+      h("h2", { class: "word" }, c.word),
+      sentenceEl(c.sentence, c.used),
+      revealed ? h("div", { class: "back" }, h("div", { class: "label" }, "Tanım"), h("p", { class: "meaning" }, c.meaning)) : null);
+    root.append(card);
+    if (!revealed) {
+      root.append(h("button", { class: "btn primary block", type: "button", onclick: function () { revealed = true; updateStudy(); } }, "Tanımı göster"));
+    } else {
+      var now2 = Date.now();
+      root.append(h("div", { class: "rates" }, [["again", "Tekrar"], ["hard", "Zor"], ["good", "İyi"], ["easy", "Kolay"]].map(function (o) {
+        return h("button", { class: "rate " + o[0], type: "button", onclick: function () { rate(c, o[0]); } },
+          h("span", {}, o[1]), h("small", {}, fmt(nextState(c, o[0]).due - now2)));
+      })));
+    }
+  }
+
+  /* ---------- Ekle ---------- */
+  var wordIn = $("word"), genBtn = $("gen"), sentIn = $("sentEdit"), defIn = $("defEdit"), lastId = null;
+
+  function updateAdd() {
+    var off = sampleState === "off", w = wordIn.value.trim();
+    $("manual").hidden = !off; $("offNote").hidden = !off;
+    var ready = off ? !!(w && sentIn.value.trim() && defIn.value.trim()) : !!(w && sampleState === "ok");
+    genBtn.disabled = genBusy || !ready;
+    genBtn.textContent = genBusy ? "Hazırlanıyor…" : "Ekle";
+    var dup = w && cards.find(function (c) { return c.word.toLowerCase() === w.toLowerCase(); });
+    $("dup").hidden = !dup;
+    if (dup) $("dup").textContent = "“" + dup.word + "” zaten kayıtlı.";
+  }
+  function showErr(msg) { var e = $("err"); e.textContent = msg; e.hidden = !msg; }
+
+  function addCard(w, r) {
+    var now = Date.now();
+    var c = { id: newId(), word: w, sentence: r.sentence, used: r.used || w, meaning: r.definition, created: now, due: now, interval: 0, ease: 2.5, reps: 0, lapses: 0, reviews: 0 };
+    lastId = c.id;
+    saveCard(c);
+  }
+  async function onAdd() {
+    var w = wordIn.value.trim();
+    if (!w || genBusy) return;
+    showErr("");
+    if (sampleState === "off") {
+      var s = sentIn.value.trim(), d = defIn.value.trim();
+      if (!s || !d) return;
+      addCard(w, { sentence: s, used: w, definition: d });
+      wordIn.value = ""; sentIn.value = ""; defIn.value = "";
+      updateAdd();
+      return;
+    }
+    if (sampleState !== "ok") return;
+    genBusy = true; updateAdd();
+    try {
+      var r = await generate(w);
+      addCard(w, r);
+      wordIn.value = "";
+    } catch (e) {
+      if (e && GONE.indexOf(e.code) >= 0) sampleState = "off"; else showErr(genError(e));
+    } finally {
+      genBusy = false; updateAdd();
+    }
+  }
+  async function regenCard(c, btn) {
+    btn.disabled = true; btn.textContent = "Hazırlanıyor…";
+    try {
+      var r = await generate(c.word, c.sentence);
+      saveCard(Object.assign({}, c, { sentence: r.sentence, used: r.used, meaning: r.definition }));
+      toast("Yeni cümle hazır");
+    } catch (e) {
+      if (e && GONE.indexOf(e.code) >= 0) { sampleState = "off"; updateAdd(); } else toast(genError(e));
+    }
+    if (btn.isConnected) { btn.disabled = false; btn.textContent = "Başka cümle"; }
+  }
+  function renderResult() {
+    var root = $("result");
+    var c = lastId && cards.find(function (x) { return x.id === lastId; });
+    root.hidden = !c;
+    root.replaceChildren();
+    if (!c) return;
+    var regen = h("button", { class: "btn ghost small", type: "button", hidden: sampleState !== "ok" }, "Başka cümle");
+    regen.addEventListener("click", function () { regenCard(c, regen); });
+    root.append(h("article", { class: "card added" },
+      h("div", { class: "meta" }, h("span", { class: "label" }, "Eklendi")),
+      h("h2", { class: "word" }, c.word),
+      sentenceEl(c.sentence, c.used),
+      h("p", { class: "defn" }, c.meaning),
+      h("div", { class: "row" }, regen,
+        h("button", { class: "btn ghost small danger", type: "button", onclick: function () { removeCard(c.id); } }, "Geri al"))));
+  }
+
+  genBtn.addEventListener("click", onAdd);
+  wordIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); onAdd(); } });
+  wordIn.addEventListener("input", function () { showErr(""); updateAdd(); });
+  sentIn.addEventListener("input", updateAdd);
+  defIn.addEventListener("input", updateAdd);
+
+  /* ---------- Kelimeler ---------- */
+  function itemEl(c) {
+    var now = Date.now();
+    var d = h("details", { class: "item", open: openIds.has(c.id) });
+    d.addEventListener("toggle", function () { if (d.open) openIds.add(c.id); else openIds.delete(c.id); });
+    var chip = !c.reviews ? h("span", { class: "chip new" }, "Yeni")
+      : c.due <= now ? h("span", { class: "chip due" }, "Bekliyor")
+      : h("span", { class: "chip" }, fmt(c.due - now));
+    d.append(h("summary", {}, h("div", { class: "sum" }, h("b", {}, c.word), h("span", { class: "muted ell" }, c.meaning)), chip));
+
+    var regen = h("button", { class: "btn ghost small", type: "button", hidden: sampleState !== "ok" }, "Başka cümle");
+    regen.addEventListener("click", function () { regenCard(c, regen); });
+    var del = h("button", { class: "btn ghost small danger", type: "button" }, "Sil");
+    var armed = false, tm;
+    del.addEventListener("click", function () {
+      if (!armed) {
+        armed = true; del.textContent = "Emin misin? Sil";
+        tm = setTimeout(function () { armed = false; del.textContent = "Sil"; }, 3500);
+      } else { clearTimeout(tm); removeCard(c.id); }
+    });
+    var info = c.reviews
+      ? c.reviews + " tekrar · sonraki: " + (c.due <= now ? "şimdi" : fmt(c.due - now) + " sonra")
+      : "Henüz çalışılmadı";
+    d.append(h("div", { class: "detail" },
+      sentenceEl(c.sentence, c.used),
+      h("p", { class: "defn" }, c.meaning),
+      h("p", { class: "note" }, info),
+      h("div", { class: "row" }, regen, del)));
+    return d;
+  }
+  function updateList() {
+    var root = $("list"), qv = $("search").value.trim().toLowerCase();
+    var items = cards.filter(function (c) {
+      return !qv || c.word.toLowerCase().indexOf(qv) >= 0 || c.meaning.toLowerCase().indexOf(qv) >= 0;
+    }).sort(function (a, b) { return b.created - a.created; });
+    var note = cards.length ? cards.length + " kelime · Kartlar yalnızca bu tarayıcıda saklanıyor." : "";
+    $("listnote").textContent = note;
+    root.hidden = !items.length && !cards.length;
+    root.replaceChildren.apply(root, items.length ? items.map(itemEl)
+      : cards.length ? [h("div", { class: "empty muted" }, "Eşleşen kelime yok.")] : []);
+  }
+  $("search").addEventListener("input", updateList);
+
+  /* ---------- shell ---------- */
+  function updateHeader() {
+    var now = Date.now();
+    var n = cards.filter(function (c) { return c.due <= now; }).length;
+    $("count").textContent = loaded && cards.length ? n + " bekliyor" : "";
+  }
+  function refreshAll() { updateHeader(); updateStudy(); updateList(); updateAdd(); renderResult(); }
+
+  var VIEWS = ["calis", "ekle", "kelimeler"];
+  function setView(v, fromHash) {
+    if (VIEWS.indexOf(v) < 0) v = "calis";
+    view = v;
+    VIEWS.forEach(function (n) { $("v-" + n).hidden = n !== v; });
+    document.querySelectorAll(".tab").forEach(function (t) {
+      if (t.dataset.view === v) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+    });
+    if (v === "calis") updateStudy();
+    if (v === "kelimeler") updateList();
+    if (!fromHash) { try { if (location.hash.slice(1) !== v) location.hash = v; } catch (e) {} }
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () { setView(t.dataset.view); });
+  });
+  window.addEventListener("hashchange", function () {
+    var v = location.hash.slice(1);
+    if (VIEWS.indexOf(v) >= 0 && v !== view) setView(v, true);
+  });
+
+  /* ---------- startup ---------- */
+  function initSample() {
+    var c = window.claude;
+    if (!c || !c.use) { sampleState = "off"; updateAdd(); return; }
+    c.use("sample").then(function (fn) {
+      sample = fn; sampleState = fn ? "ok" : "off";
+    }, function () { sampleState = "off"; }).then(function () { updateAdd(); updateList(); renderResult(); });
+  }
+
+  setView((location.hash || "").slice(1) || "calis", true);
+  startLocal();
+  initSample();
+})();
+</script>
+</body>
+</html>
