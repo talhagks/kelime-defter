@@ -467,29 +467,64 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   var EXT = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8"/><path d="M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4"/></svg>';
   var pronCache = {}, curAudio = null;
 
+  async function fetchText(url, ms) {
+    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, ms);
+    try {
+      var r = await fetch(url, { signal: ctl.signal });
+      return r.ok ? await r.text() : "";
+    } catch (e) { return ""; } finally { clearTimeout(t); }
+  }
+  var PROXIES = [
+    function (u) { return "https://corsproxy.io/?url=" + encodeURIComponent(u); },
+    function (u) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
+    function (u) { return "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u); }
+  ];
+  async function cambridgePron(word) {
+    var out = { us: "", uk: "", ipaUs: "", ipaUk: "" };
+    var page = "https://dictionary.cambridge.org/dictionary/english/" + encodeURIComponent(word.toLowerCase().replace(/\s+/g, "-"));
+    for (var i = 0; i < PROXIES.length; i++) {
+      var html = await fetchText(PROXIES[i](page), 5000);
+      if (!html || html.indexOf("dpron-i") < 0) continue;
+      var doc = new DOMParser().parseFromString(html, "text/html");
+      ["uk", "us"].forEach(function (k) {
+        var el = doc.querySelector("span." + k + ".dpron-i");
+        if (!el) return;
+        var s = el.querySelector("source[type='audio/mpeg']") || el.querySelector("source");
+        var src = s && s.getAttribute("src");
+        if (src) out[k] = src.indexOf("http") === 0 ? src : "https://dictionary.cambridge.org" + src;
+        var ip = el.querySelector(".ipa");
+        if (ip) out[k === "uk" ? "ipaUk" : "ipaUs"] = "/" + ip.textContent.trim() + "/";
+      });
+      if (out.us || out.uk) break;
+    }
+    return out;
+  }
   function getPron(word) {
     var key = word.toLowerCase();
     if (pronCache[key]) return pronCache[key];
     pronCache[key] = (async function () {
       var out = { us: "", uk: "", ipa: "" };
-      var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 8000);
-      try {
-        var res = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(key), { signal: ctl.signal });
-        if (!res.ok) return out;
-        var data = await res.json();
-        if (!Array.isArray(data)) return out;
-        data.forEach(function (e) {
-          if (!out.ipa && e.phonetic) out.ipa = e.phonetic;
-          (e.phonetics || []).forEach(function (p) {
-            if (!out.ipa && p.text) out.ipa = p.text;
-            var a = p.audio ? (p.audio.indexOf("//") === 0 ? "https:" + p.audio : p.audio) : "";
-            if (!a) return;
-            var l = a.toLowerCase();
-            if (!out.us && /-us[.\-_]/.test(l)) out.us = a;
-            else if (!out.uk && /-uk[.\-_]/.test(l)) out.uk = a;
+      var cam = await cambridgePron(word);
+      out.us = cam.us; out.uk = cam.uk;
+      out.ipa = [cam.ipaUs && "US " + cam.ipaUs, cam.ipaUk && "UK " + cam.ipaUk].filter(Boolean).join("   ·   ");
+      if (!out.us || !out.uk || !out.ipa) {
+        var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 8000);
+        try {
+          var res = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(key), { signal: ctl.signal });
+          var data = res.ok ? await res.json() : [];
+          if (Array.isArray(data)) data.forEach(function (e) {
+            if (!out.ipa && e.phonetic) out.ipa = e.phonetic;
+            (e.phonetics || []).forEach(function (p) {
+              if (!out.ipa && p.text) out.ipa = p.text;
+              var a = p.audio ? (p.audio.indexOf("//") === 0 ? "https:" + p.audio : p.audio) : "";
+              if (!a) return;
+              var l = a.toLowerCase();
+              if (!out.us && /-us[.\-_]/.test(l)) out.us = a;
+              else if (!out.uk && /-uk[.\-_]/.test(l)) out.uk = a;
+            });
           });
-        });
-      } catch (e) {} finally { clearTimeout(t); }
+        } catch (e) {} finally { clearTimeout(t); }
+      }
       return out;
     })();
     return pronCache[key];
@@ -506,11 +541,15 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
   function playWord(word, accent) {
     try { if (curAudio) curAudio.pause(); if ("speechSynthesis" in window) speechSynthesis.cancel(); } catch (e) {}
-    getPron(word).then(function (p) {
-      var url = accent === "uk" ? p.uk : p.us;
+    var slowTimer = new Promise(function (res) { setTimeout(function () { res(null); }, 3500); });
+    Promise.race([getPron(word), slowTimer]).then(function (p) {
+      var url = p && (accent === "uk" ? p.uk : p.us);
       if (!url) { speakWord(word, accent); return; }
-      curAudio = new Audio(url);
-      curAudio.play().catch(function () { speakWord(word, accent); });
+      var a = new Audio();
+      a.referrerPolicy = "no-referrer";
+      a.src = url;
+      curAudio = a;
+      a.play().catch(function () { speakWord(word, accent); });
     });
   }
   function pronButtons(word) {
