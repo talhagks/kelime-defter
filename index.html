@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,7 +7,7 @@
 <title>Kelime Defteri</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap">
 <style>
-:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+:root { color-scheme: dark; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 body { margin: 0; }
 [hidden] { display: none !important; }
 </style>
@@ -98,7 +98,7 @@ mark {
 
 .form { display: grid; gap: 18px; }
 .field { display: grid; gap: 7px; }
-input[type="text"], input[type="search"], input[type="password"], textarea {
+input[type="text"], input[type="search"], textarea {
   width: 100%; font-size: 17px; line-height: 1.4; padding: 13px 14px; border-radius: 12px;
   border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
 }
@@ -160,12 +160,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .gbtns.edit { grid-template-columns: 2fr 1fr; }
 .gbody { margin: 0; font: 400 18px/1.6 var(--font-read); white-space: pre-wrap; overflow-wrap: anywhere; }
 .gprev { font-size: 14px; }
-.how { font-size: 14px; color: var(--muted); }
-.how summary { cursor: pointer; font-weight: 600; color: var(--accent); min-height: 44px; display: flex; align-items: center; }
-.how ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
-.how a { color: var(--accent); font-weight: 600; }
-.links { display: flex; flex-wrap: wrap; gap: 6px 18px; }
-.links a { color: var(--accent); font-weight: 600; font-size: 15px; min-height: 32px; display: inline-flex; align-items: center; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -218,11 +212,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
           <textarea id="sentEdit" rows="3" aria-label="Örnek cümle" autocapitalize="sentences" spellcheck="true"></textarea>
           <span class="label">Tanım (İngilizce)</span>
           <textarea id="defEdit" rows="2" aria-label="Tanım" autocapitalize="sentences" spellcheck="true"></textarea>
-          <div class="links">
-            <a id="lnkTureng" href="https://tureng.com" target="_blank" rel="noopener noreferrer">Tureng'de bak</a>
-            <a id="lnkCamb" href="https://dictionary.cambridge.org" target="_blank" rel="noopener noreferrer">Cambridge'de bak</a>
-          </div>
-          <button class="btn ghost" id="noSent" type="button">Cümlesiz ekle</button>
         </div>
         <div class="field">
           <button class="btn primary block" id="gen" type="button" disabled>Ekle</button>
@@ -231,47 +220,12 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         </div>
       </div>
       <div id="result" hidden></div>
-      <div class="card form" id="bulkCard">
-        <div class="field">
-          <span class="label">Toplu ekle</span>
-          <p class="note">Kelimeleri alt alta (ya da virgülle) yapıştır. Her biri için tanım ve örnek cümle otomatik aranır. "happy - mutlu" gibi yazdıysan sadece İngilizce kısmı alınır, zaten kayıtlı olanlar atlanır.</p>
-          <textarea id="bulkText" rows="8" placeholder="happy&#10;solve&#10;reluctant" aria-label="Toplu kelime listesi" autocapitalize="none" autocorrect="off" spellcheck="false"></textarea>
-        </div>
-        <button class="btn primary block" id="bulkGo" type="button" disabled>Hepsini ekle</button>
-        <button class="btn ghost block" id="bulkStop" type="button" hidden>Durdur</button>
-        <p class="note" id="bulkStatus"></p>
-      </div>
     </section>
 
     <section id="v-kelimeler" class="view" aria-label="Kelimeler" hidden>
       <input id="search" type="search" placeholder="Kelime veya anlam ara" autocapitalize="none" autocomplete="off" spellcheck="false" aria-label="Ara">
       <p class="note" id="listnote"></p>
       <div id="list" class="list"></div>
-      <div class="card form" id="syncCard">
-        <div class="field">
-          <span class="label">Cihazlar arası eşitleme</span>
-          <p class="note">Telefon ve bilgisayarda aynı kelimeler ve notlar görünsün diye GitHub hesabındaki gizli bir dosyaya (Gist) kaydedilir.</p>
-        </div>
-        <div class="form" id="syncSetup">
-          <input id="syncToken" type="password" placeholder="GitHub token (ghp_...)" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="GitHub token">
-          <button class="btn primary block" id="syncConnect" type="button">Bağla</button>
-          <details class="how">
-            <summary>Token nasıl alınır?</summary>
-            <ol>
-              <li><a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=kelime-defteri" target="_blank" rel="noopener noreferrer">Bu bağlantıyı aç</a> (GitHub'a giriş yap).</li>
-              <li>Sadece "gist" kutusu işaretli olmalı. Süreyi "No expiration" yap.</li>
-              <li>En alttaki yeşil "Generate token" düğmesine bas.</li>
-              <li>Çıkan ghp_ ile başlayan kodu kopyala, buraya yapıştır ve Bağla'ya bas.</li>
-              <li>Diğer cihazda da aynı tokeni gir.</li>
-            </ol>
-          </details>
-        </div>
-        <div class="form" id="syncOn" hidden>
-          <p class="note" id="syncStatus"></p>
-          <button class="btn ghost block" id="syncNowBtn" type="button">Şimdi eşitle</button>
-          <button class="btn ghost block danger" id="syncOff" type="button">Bağlantıyı kes</button>
-        </div>
-      </div>
     </section>
     <section id="v-grammar" class="view" aria-label="Grammar" hidden>
       <div class="card form">
@@ -349,11 +303,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   var learning = new Set(), openIds = new Set(), chain = {};
   var shownId = null, revealed = false, view = "calis";
   var genBusy = false;
-  var LSS = "kelime-defteri-sync-v1", LST = "kelime-defteri-tomb-v1", GFILE = "kelime-defteri.json";
-  var sync = { token: "", gistId: "", last: 0 }, tombs = { c: {}, g: {} };
-  var syncBusy = false, syncAgain = false, syncTimer = null;
-  try { var sv = JSON.parse(localStorage.getItem(LSS) || "null"); if (sv && sv.token) sync = sv; } catch (e) {}
-  try { var tv = JSON.parse(localStorage.getItem(LST) || "null"); if (tv && tv.c && tv.g) tombs = tv; } catch (e) {}
 
   function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   var toastTimer;
@@ -397,17 +346,16 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     });
   }
   function saveCard(c) {
-    c.mod = Date.now();
     put(c);
     if (mode === "db") queueWrite(c.id, function () { return col.doc(c.id).set(c); });
-    else { persistLocal(); scheduleSync(); }
+    else persistLocal();
     refreshAll();
   }
   function removeCard(id) {
     cards = cards.filter(function (c) { return c.id !== id; });
     learning.delete(id); openIds.delete(id);
     if (mode === "db") queueWrite(id, function () { return col.doc(id).delete(); });
-    else { tombs.c[id] = Date.now(); saveTombs(); persistLocal(); scheduleSync(); }
+    else persistLocal();
     refreshAll();
   }
   function startLocal() {
@@ -415,8 +363,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     try { cards = JSON.parse(localStorage.getItem(LS) || "[]"); } catch (e) { cards = []; }
     if (!Array.isArray(cards)) cards = [];
     loaded = true; refreshAll();
-    updateSyncUi();
-    if (sync.token) syncNow();
   }
 
   /* ---------- sentence generation ---------- */
@@ -477,56 +423,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     } finally { clearTimeout(t); }
   }
 
-  async function lookupSentence(word) {
-    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 8000);
-    try {
-      var url = "https://tatoeba.org/en/api_v0/search?from=eng&orphans=no&unapproved=no&query=" + encodeURIComponent(word);
-      var res = await fetch(url, { signal: ctl.signal });
-      if (!res.ok) return "";
-      var data = await res.json();
-      var list = (data && data.results || []).map(function (r) { return String(r.text || "").trim(); })
-        .filter(function (x) { return x.length >= 20 && x.length <= 130; });
-      var esc = word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      var exact = new RegExp("(^|[^a-z])" + esc + "([^a-z]|$)", "i");
-      var pick = list.filter(function (x) { return exact.test(x); })[0];
-      if (!pick) {
-        var stem = word.length > 4 ? word.slice(0, -2) : word;
-        var loose = new RegExp("(^|[^a-z])" + stem.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-        pick = list.filter(function (x) { return loose.test(x); })[0];
-      }
-      return pick || "";
-    } finally { clearTimeout(t); }
-  }
-
-  async function lookupWiktionary(word) {
-    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 8000);
-    try {
-      var res = await fetch("https://en.wiktionary.org/api/rest_v1/page/definition/" + encodeURIComponent(word.toLowerCase()), { signal: ctl.signal });
-      if (!res.ok) return null;
-      var data = await res.json(), en = data && data.en;
-      if (!Array.isArray(en)) return null;
-      var strip = function (html) { return (new DOMParser().parseFromString(String(html || ""), "text/html").body.textContent || "").replace(/\s+/g, " ").trim(); };
-      var sents = [], def = "";
-      en.forEach(function (e) {
-        (e.definitions || []).forEach(function (d) {
-          if (!def && d.definition) {
-            var pos = String(e.partOfSpeech || "").toLowerCase(), txt = strip(d.definition);
-            if (txt) def = (pos ? "(" + pos + ") " : "") + txt;
-          }
-          (d.examples || []).forEach(function (x) { sents.push(strip(x)); });
-          (d.parsedExamples || []).forEach(function (x) { if (x && x.example) sents.push(strip(x.example)); });
-        });
-      });
-      sents = sents.filter(function (x) { return x.length >= 15 && x.length <= 160; });
-      var w = word.toLowerCase(), stem = (w.length > 4 ? w.slice(0, -2) : w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      var re = new RegExp("(^|[^a-z])" + stem, "i");
-      var pick = sents.filter(function (x) { return re.test(x); })[0] || sents[0] || "";
-      return { sentence: pick, definition: def };
-    } finally { clearTimeout(t); }
-  }
-
   function sentenceEl(s, used, cls) {
-    if (!s) return null;
     var p = h("p", { class: cls || "sentence" });
     var i = used ? s.toLowerCase().indexOf(used.toLowerCase()) : -1;
     if (i < 0) { p.textContent = s; return p; }
@@ -594,8 +491,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   function updateAdd() {
     var off = sampleState === "off", w = wordIn.value.trim();
     $("manual").hidden = !(off && needManual); $("offNote").hidden = !off;
-    $("lnkTureng").href = "https://tureng.com/en/turkish-english/" + encodeURIComponent(w.toLowerCase());
-    $("lnkCamb").href = "https://dictionary.cambridge.org/dictionary/english/" + encodeURIComponent(w.toLowerCase());
     var ready = off ? !!w : !!(w && sampleState === "ok");
     genBtn.disabled = genBusy || !ready;
     genBtn.textContent = genBusy ? "Hazırlanıyor…" : "Ekle";
@@ -622,23 +517,15 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         var found = null;
         try { found = await lookupWord(w); } catch (e) { found = null; }
         genBusy = false;
-        var extra = "", wik = null;
-        if (!s && !(found && found.sentence)) {
-          genBusy = true; updateAdd();
-          try { wik = await lookupWiktionary(w); } catch (e) { wik = null; }
-          extra = (wik && wik.sentence) || "";
-          if (!extra) { try { extra = await lookupSentence(w); } catch (e) { extra = ""; } }
-          genBusy = false;
-        }
-        var fs = s || (found && found.sentence) || extra || "", fd = d || (found && found.definition) || (wik && wik.definition) || "";
+        var fs = s || (found && found.sentence) || "", fd = d || (found && found.definition) || "";
         if (fs && fd) {
           addCard(w, { sentence: fs, used: findUsed(fs, w), definition: fd });
           wordIn.value = ""; sentIn.value = ""; defIn.value = ""; needManual = false;
         } else {
           needManual = true;
           if (fd) defIn.value = fd;
-          showErr(fd ? "Bu kelime için örnek cümle bulunamadı. Aşağıdaki bağlantılardan bir cümle bulup yapıştır ve Ekle'ye bas, ya da Cümlesiz ekle'yi kullan."
-                     : "Sözlükte bulunamadı. Tanımı ve cümleyi kendin yazıp Ekle'ye bas.");
+          showErr(fd ? "Bu kelime için örnek cümle bulunamadı. Cümleyi kendin yaz, sonra Ekle'ye bas."
+                     : "Sözlükte bulunamadı. Cümleyi ve tanımı kendin yazıp Ekle'ye bas.");
         }
         updateAdd();
         return;
@@ -688,87 +575,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         h("button", { class: "btn ghost small danger", type: "button", onclick: function () { removeCard(c.id); } }, "Geri al"))));
   }
 
-  /* ---------- Toplu ekle ---------- */
-  var bulkRun = false, bulkStop = false;
-  function parseBulk(text) {
-    var out = [], seen = {};
-    String(text || "").split(/\r?\n/).forEach(function (line) {
-      line = line.replace(/^[\s\-•*\d.)]+/, "");
-      line = line.split(/\s[-–—=:]\s|\t|\(|=|:/)[0];
-      line.split(/[,;]/).forEach(function (w) {
-        w = w.replace(/\s+/g, " ").trim();
-        var k = w.toLowerCase();
-        if (w && w.length <= 60 && /[a-z]/i.test(w) && !seen[k]) { seen[k] = 1; out.push(w); }
-      });
-    });
-    return out.slice(0, 300);
-  }
-  async function autoEntry(w) {
-    if (sampleState === "ok") {
-      try { var r = await generate(w); return { sentence: r.sentence, used: r.used, definition: r.definition }; }
-      catch (e) { if (GONE.indexOf(e && e.code) >= 0) sampleState = "off"; else return null; }
-    }
-    var found = null, wik = null;
-    try { found = await lookupWord(w); } catch (e) { found = null; }
-    var sent = (found && found.sentence) || "", def = (found && found.definition) || "";
-    if (!sent || !def) {
-      try { wik = await lookupWiktionary(w); } catch (e) { wik = null; }
-      if (!sent) sent = (wik && wik.sentence) || "";
-      if (!def) def = (wik && wik.definition) || "";
-    }
-    if (!sent) { try { sent = await lookupSentence(w); } catch (e) { sent = ""; } }
-    if (!def) return null;
-    return { sentence: sent, used: sent ? findUsed(sent, w) : w, definition: def };
-  }
-  function updateBulkBtn() { $("bulkGo").disabled = bulkRun || !parseBulk($("bulkText").value).length; }
-  async function runBulk() {
-    if (bulkRun) return;
-    var list = parseBulk($("bulkText").value);
-    if (!list.length) return;
-    bulkRun = true; bulkStop = false;
-    $("bulkGo").hidden = true; $("bulkStop").hidden = false; $("bulkText").readOnly = true;
-    var have = {}; cards.forEach(function (c) { have[c.word.toLowerCase()] = 1; });
-    var added = 0, dup = 0, noSent = 0, left = [], i = 0;
-    for (; i < list.length; i++) {
-      if (bulkStop) break;
-      var w = list[i];
-      $("bulkStatus").textContent = (i + 1) + "/" + list.length + " · " + w + "…";
-      if (have[w.toLowerCase()]) { dup++; continue; }
-      var e = null;
-      try { e = await autoEntry(w); } catch (x) { e = null; }
-      if (e && e.definition) {
-        var now = Date.now();
-        saveCard({ id: newId(), word: w, sentence: e.sentence || "", used: e.used || w, meaning: e.definition, created: now, due: now, interval: 0, ease: 2.5, reps: 0, lapses: 0, reviews: 0 });
-        have[w.toLowerCase()] = 1; added++;
-        if (!e.sentence) noSent++;
-      } else left.push(w);
-      await new Promise(function (r) { setTimeout(r, 200); });
-    }
-    var rest = list.slice(i);
-    $("bulkText").value = left.concat(rest).join("\n");
-    bulkRun = false; $("bulkText").readOnly = false;
-    $("bulkGo").hidden = false; $("bulkStop").hidden = true;
-    var msg = added + " kelime eklendi";
-    if (noSent) msg += " (" + noSent + " tanesinde cümle bulunamadı)";
-    if (dup) msg += ", " + dup + " tanesi zaten kayıtlıydı";
-    if (left.length) msg += ", " + left.length + " tanesi bulunamadı (kutuda kaldı)";
-    if (rest.length) msg += ", " + rest.length + " tanesi işlenmedi (kutuda kaldı)";
-    $("bulkStatus").textContent = msg + ".";
-    updateBulkBtn(); updateAdd();
-  }
-  $("bulkText").addEventListener("input", updateBulkBtn);
-  $("bulkGo").addEventListener("click", runBulk);
-  $("bulkStop").addEventListener("click", function () { bulkStop = true; $("bulkStatus").textContent = "Durduruluyor…"; });
-
-  $("noSent").addEventListener("click", function () {
-    var w = wordIn.value.trim(), d = defIn.value.trim();
-    if (!w) return;
-    if (!d) { showErr("Önce tanımı yaz, sonra Cümlesiz ekle'ye bas."); return; }
-    showErr("");
-    addCard(w, { sentence: "", used: w, definition: d });
-    wordIn.value = ""; sentIn.value = ""; defIn.value = ""; needManual = false;
-    updateAdd();
-  });
   genBtn.addEventListener("click", onAdd);
   wordIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); onAdd(); } });
   wordIn.addEventListener("input", function () { showErr(""); updateAdd(); });
@@ -811,7 +617,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       return !qv || c.word.toLowerCase().indexOf(qv) >= 0 || c.meaning.toLowerCase().indexOf(qv) >= 0;
     }).sort(function (a, b) { return b.created - a.created; });
     var note = cards.length ? cards.length + " kelime" : "";
-    if (mode === "local") note += (note ? " · " : "") + (sync.token ? "Cihazlar arası eşitleme açık." : "Kartlar yalnızca bu tarayıcıda saklanıyor.");
+    if (mode === "local") note += (note ? " · " : "") + "Kartlar yalnızca bu tarayıcıda saklanıyor.";
     $("listnote").textContent = note;
     root.hidden = !items.length && !cards.length;
     root.replaceChildren.apply(root, items.length ? items.map(itemEl)
@@ -897,8 +703,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   if (!Array.isArray(gNotes)) gNotes = [];
   var gTitle = $("gTitle"), gBody = $("gBody"), gSave = $("gSave"), gCancel = $("gCancel");
 
-  function gStore() { try { localStorage.setItem(LSG, JSON.stringify(gNotes)); } catch (e) { toast("Not kaydedilemedi."); } }
-  function gPersist() { gStore(); scheduleSync(); }
+  function gPersist() { try { localStorage.setItem(LSG, JSON.stringify(gNotes)); } catch (e) { toast("Not kaydedilemedi."); } }
   function gUpdateBtn() {
     gSave.disabled = !(gTitle.value.trim() && gBody.value.trim());
     gSave.textContent = gEditId ? "Güncelle" : "Kaydet";
@@ -937,7 +742,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       } else {
         clearTimeout(tm);
         gNotes = gNotes.filter(function (x) { return x.id !== n.id; });
-        tombs.g[n.id] = Date.now(); saveTombs();
         gOpen.delete(n.id);
         if (gEditId === n.id) gReset();
         gPersist(); gRender();
@@ -952,7 +756,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       return !qv || n.title.toLowerCase().indexOf(qv) >= 0 || n.body.toLowerCase().indexOf(qv) >= 0;
     }).sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
     $("gNote").textContent = gNotes.length
-      ? gNotes.length + " not · " + (sync.token ? "Cihazlar arası eşitleme açık." : "Notlar yalnızca bu tarayıcıda saklanıyor.")
+      ? gNotes.length + " not · Notlar yalnızca bu tarayıcıda saklanıyor."
       : "Henüz notun yok. Yukarıya ilk grammar notunu yaz.";
     root.hidden = !gNotes.length;
     root.replaceChildren.apply(root, items.length ? items.map(gItem)
@@ -963,116 +767,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   gTitle.addEventListener("input", gUpdateBtn);
   gBody.addEventListener("input", gUpdateBtn);
   $("gSearch").addEventListener("input", gRender);
-
-  /* ---------- Eşitleme (GitHub Gist) ---------- */
-  function saveSyncState() { try { localStorage.setItem(LSS, JSON.stringify(sync)); } catch (e) {} }
-  function saveTombs() { try { localStorage.setItem(LST, JSON.stringify(tombs)); } catch (e) {} }
-  function stampC(x) { return x.mod || x.created || 0; }
-  function stampG(x) { return x.updated || x.created || 0; }
-  function maxTombs(a, b) {
-    var o = Object.assign({}, a || {});
-    Object.keys(b || {}).forEach(function (k) { if (!o[k] || b[k] > o[k]) o[k] = b[k]; });
-    return o;
-  }
-  function sortObj(o) { var r = {}; Object.keys(o).sort().forEach(function (k) { r[k] = o[k]; }); return r; }
-  function mergeSet(a, b, tb, stamp) {
-    var map = {};
-    a.concat(b).forEach(function (x) {
-      if (!x || !x.id) return;
-      var o = map[x.id];
-      if (!o || stamp(x) > stamp(o)) map[x.id] = x;
-    });
-    return Object.keys(map).map(function (k) { return map[k]; })
-      .filter(function (x) { return !(tb[x.id] && tb[x.id] >= stamp(x)); });
-  }
-  function byId(a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; }
-  function mergeAll(r) {
-    r = r || {};
-    var tc = maxTombs(tombs.c, r.tombC), tg = maxTombs(tombs.g, r.tombG);
-    var mc = mergeSet(cards, Array.isArray(r.cards) ? r.cards : [], tc, stampC);
-    mc.sort(function (a, b) { return ((b.reviews || 0) - (a.reviews || 0)) || (stampC(b) - stampC(a)); });
-    var seen = {}, outC = [];
-    mc.forEach(function (x) {
-      var k = String(x.word || "").trim().toLowerCase();
-      if (k && seen[k]) { tc[x.id] = Date.now(); return; }
-      seen[k] = 1; outC.push(x);
-    });
-    var mg = mergeSet(gNotes, Array.isArray(r.gnotes) ? r.gnotes : [], tg, stampG);
-    return { v: 1, cards: outC.sort(byId), gnotes: mg.sort(byId), tombC: sortObj(tc), tombG: sortObj(tg) };
-  }
-  async function gh(method, path, body) {
-    var headers = { "Authorization": "Bearer " + sync.token, "Accept": "application/vnd.github+json" };
-    if (body) headers["Content-Type"] = "application/json";
-    var res = await fetch("https://api.github.com" + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined });
-    if (res.status === 401) throw { code: "auth" };
-    if (!res.ok) throw { code: "http", status: res.status };
-    return res.json();
-  }
-  async function findGist() {
-    for (var p = 1; p <= 3; p++) {
-      var list = await gh("GET", "/gists?per_page=100&page=" + p);
-      if (!Array.isArray(list) || !list.length) return "";
-      for (var i = 0; i < list.length; i++) if (list[i].files && list[i].files[GFILE]) return list[i].id;
-      if (list.length < 100) return "";
-    }
-    return "";
-  }
-  function setSyncMsg(t, bad) { var e = $("syncStatus"); e.textContent = t; e.className = bad ? "note err" : "note"; }
-  function updateSyncUi() {
-    $("syncCard").hidden = mode === "db";
-    $("syncSetup").hidden = !!sync.token;
-    $("syncOn").hidden = !sync.token;
-  }
-  function scheduleSync() {
-    if (!sync.token || mode !== "local") return;
-    clearTimeout(syncTimer);
-    syncTimer = setTimeout(syncNow, 1500);
-  }
-  async function syncNow() {
-    if (!sync.token || mode !== "local") return;
-    if (syncBusy) { syncAgain = true; return; }
-    syncBusy = true; setSyncMsg("Eşitleniyor…");
-    try {
-      if (!sync.gistId) { sync.gistId = await findGist(); saveSyncState(); }
-      var remote = null, raw = "";
-      if (sync.gistId) {
-        var g = await gh("GET", "/gists/" + sync.gistId);
-        var f = g.files && g.files[GFILE];
-        if (f && typeof f.content === "string") { raw = f.content; try { remote = JSON.parse(raw); } catch (e) { remote = null; } }
-      }
-      var m = mergeAll(remote);
-      cards = m.cards; gNotes = m.gnotes; tombs = { c: m.tombC, g: m.tombG };
-      persistLocal(); gStore(); saveTombs();
-      refreshAll(); gRender();
-      var out = JSON.stringify(m);
-      if (out !== raw) {
-        var files = {}; files[GFILE] = { content: out };
-        if (sync.gistId) await gh("PATCH", "/gists/" + sync.gistId, { files: files });
-        else { var cr = await gh("POST", "/gists", { description: "Kelime Defteri verileri", public: false, files: files }); sync.gistId = cr.id; }
-      }
-      sync.last = Date.now(); saveSyncState();
-      setSyncMsg("Eşitlendi · " + new Date(sync.last).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
-    } catch (e) {
-      if (e && e.code === "auth") setSyncMsg("Token geçersiz veya süresi dolmuş. Bağlantıyı kesip yeni token gir.", true);
-      else if (e && e.status === 404) { sync.gistId = ""; saveSyncState(); setSyncMsg("Eşitleme dosyası bulunamadı. Tekrar dene.", true); }
-      else setSyncMsg("Eşitlenemedi. İnternetini kontrol edip tekrar dene.", true);
-    } finally {
-      syncBusy = false;
-      if (syncAgain) { syncAgain = false; scheduleSync(); }
-    }
-  }
-  $("syncConnect").addEventListener("click", function () {
-    var t = $("syncToken").value.trim();
-    if (!t) return;
-    sync = { token: t, gistId: "", last: 0 }; saveSyncState();
-    $("syncToken").value = ""; updateSyncUi(); updateList(); gRender(); syncNow();
-  });
-  $("syncNowBtn").addEventListener("click", syncNow);
-  $("syncOff").addEventListener("click", function () {
-    sync = { token: "", gistId: "", last: 0 }; saveSyncState();
-    updateSyncUi(); updateList(); gRender(); toast("Bağlantı kesildi");
-  });
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) syncNow(); });
 
   /* ---------- shell ---------- */
   function updateHeader() {
@@ -1139,7 +833,6 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   refreshAll();
   gUpdateBtn();
   gRender();
-  updateSyncUi();
   initSample();
   initStore();
 })();
