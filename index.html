@@ -615,7 +615,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     var root = $("list"), qv = $("search").value.trim().toLowerCase();
     var items = cards.filter(function (c) {
       return !qv || c.word.toLowerCase().indexOf(qv) >= 0 || c.meaning.toLowerCase().indexOf(qv) >= 0;
-    }).sort(function (a, b) { return b.created - a.created; });
+    }).sort(function (a, b) { return a.word.localeCompare(b.word, "en", { sensitivity: "base" }); });
     var note = cards.length ? cards.length + " kelime" : "";
     if (mode === "local") note += (note ? " · " : "") + "Kartlar yalnızca bu tarayıcıda saklanıyor.";
     $("listnote").textContent = note;
@@ -631,7 +631,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   function ygUpdate() { ygGo.disabled = !ygIn.value.trim(); }
   function ygChips() {
     var root = $("ygChips");
-    var words = cards.slice().sort(function (a, b) { return b.created - a.created; }).slice(0, 12);
+    var words = cards.slice().sort(function (a, b) { return a.word.localeCompare(b.word, "en", { sensitivity: "base" }); });
     root.hidden = !words.length;
     root.replaceChildren.apply(root, words.map(function (c) {
       return h("button", { class: "wchip", type: "button", onclick: function () { ygIn.value = c.word; ygUpdate(); ygSearch(); } }, c.word);
