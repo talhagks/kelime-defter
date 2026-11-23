@@ -164,6 +164,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .how summary { cursor: pointer; font-weight: 600; color: var(--accent); min-height: 44px; display: flex; align-items: center; }
 .how ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .how a { color: var(--accent); font-weight: 600; }
+.links { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.links a { color: var(--accent); font-weight: 600; font-size: 15px; min-height: 32px; display: inline-flex; align-items: center; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -216,6 +218,11 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
           <textarea id="sentEdit" rows="3" aria-label="Örnek cümle" autocapitalize="sentences" spellcheck="true"></textarea>
           <span class="label">Tanım (İngilizce)</span>
           <textarea id="defEdit" rows="2" aria-label="Tanım" autocapitalize="sentences" spellcheck="true"></textarea>
+          <div class="links">
+            <a id="lnkTureng" href="https://tureng.com" target="_blank" rel="noopener noreferrer">Tureng'de bak</a>
+            <a id="lnkCamb" href="https://dictionary.cambridge.org" target="_blank" rel="noopener noreferrer">Cambridge'de bak</a>
+          </div>
+          <button class="btn ghost" id="noSent" type="button">Cümlesiz ekle</button>
         </div>
         <div class="field">
           <button class="btn primary block" id="gen" type="button" disabled>Ekle</button>
@@ -481,7 +488,35 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     } finally { clearTimeout(t); }
   }
 
+  async function lookupWiktionary(word) {
+    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 8000);
+    try {
+      var res = await fetch("https://en.wiktionary.org/api/rest_v1/page/definition/" + encodeURIComponent(word.toLowerCase()), { signal: ctl.signal });
+      if (!res.ok) return null;
+      var data = await res.json(), en = data && data.en;
+      if (!Array.isArray(en)) return null;
+      var strip = function (html) { return (new DOMParser().parseFromString(String(html || ""), "text/html").body.textContent || "").replace(/\s+/g, " ").trim(); };
+      var sents = [], def = "";
+      en.forEach(function (e) {
+        (e.definitions || []).forEach(function (d) {
+          if (!def && d.definition) {
+            var pos = String(e.partOfSpeech || "").toLowerCase(), txt = strip(d.definition);
+            if (txt) def = (pos ? "(" + pos + ") " : "") + txt;
+          }
+          (d.examples || []).forEach(function (x) { sents.push(strip(x)); });
+          (d.parsedExamples || []).forEach(function (x) { if (x && x.example) sents.push(strip(x.example)); });
+        });
+      });
+      sents = sents.filter(function (x) { return x.length >= 15 && x.length <= 160; });
+      var w = word.toLowerCase(), stem = (w.length > 4 ? w.slice(0, -2) : w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var re = new RegExp("(^|[^a-z])" + stem, "i");
+      var pick = sents.filter(function (x) { return re.test(x); })[0] || sents[0] || "";
+      return { sentence: pick, definition: def };
+    } finally { clearTimeout(t); }
+  }
+
   function sentenceEl(s, used, cls) {
+    if (!s) return null;
     var p = h("p", { class: cls || "sentence" });
     var i = used ? s.toLowerCase().indexOf(used.toLowerCase()) : -1;
     if (i < 0) { p.textContent = s; return p; }
@@ -549,6 +584,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   function updateAdd() {
     var off = sampleState === "off", w = wordIn.value.trim();
     $("manual").hidden = !(off && needManual); $("offNote").hidden = !off;
+    $("lnkTureng").href = "https://tureng.com/en/turkish-english/" + encodeURIComponent(w.toLowerCase());
+    $("lnkCamb").href = "https://dictionary.cambridge.org/dictionary/english/" + encodeURIComponent(w.toLowerCase());
     var ready = off ? !!w : !!(w && sampleState === "ok");
     genBtn.disabled = genBusy || !ready;
     genBtn.textContent = genBusy ? "Hazırlanıyor…" : "Ekle";
@@ -575,21 +612,23 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         var found = null;
         try { found = await lookupWord(w); } catch (e) { found = null; }
         genBusy = false;
-        var extra = "";
+        var extra = "", wik = null;
         if (!s && !(found && found.sentence)) {
           genBusy = true; updateAdd();
-          try { extra = await lookupSentence(w); } catch (e) { extra = ""; }
+          try { wik = await lookupWiktionary(w); } catch (e) { wik = null; }
+          extra = (wik && wik.sentence) || "";
+          if (!extra) { try { extra = await lookupSentence(w); } catch (e) { extra = ""; } }
           genBusy = false;
         }
-        var fs = s || (found && found.sentence) || extra || "", fd = d || (found && found.definition) || "";
+        var fs = s || (found && found.sentence) || extra || "", fd = d || (found && found.definition) || (wik && wik.definition) || "";
         if (fs && fd) {
           addCard(w, { sentence: fs, used: findUsed(fs, w), definition: fd });
           wordIn.value = ""; sentIn.value = ""; defIn.value = ""; needManual = false;
         } else {
           needManual = true;
           if (fd) defIn.value = fd;
-          showErr(fd ? "Bu kelime için örnek cümle bulunamadı. Cümleyi kendin yaz, sonra Ekle'ye bas."
-                     : "Sözlükte bulunamadı. Cümleyi ve tanımı kendin yazıp Ekle'ye bas.");
+          showErr(fd ? "Bu kelime için örnek cümle bulunamadı. Aşağıdaki bağlantılardan bir cümle bulup yapıştır ve Ekle'ye bas, ya da Cümlesiz ekle'yi kullan."
+                     : "Sözlükte bulunamadı. Tanımı ve cümleyi kendin yazıp Ekle'ye bas.");
         }
         updateAdd();
         return;
@@ -639,6 +678,15 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         h("button", { class: "btn ghost small danger", type: "button", onclick: function () { removeCard(c.id); } }, "Geri al"))));
   }
 
+  $("noSent").addEventListener("click", function () {
+    var w = wordIn.value.trim(), d = defIn.value.trim();
+    if (!w) return;
+    if (!d) { showErr("Önce tanımı yaz, sonra Cümlesiz ekle'ye bas."); return; }
+    showErr("");
+    addCard(w, { sentence: "", used: w, definition: d });
+    wordIn.value = ""; sentIn.value = ""; defIn.value = ""; needManual = false;
+    updateAdd();
+  });
   genBtn.addEventListener("click", onAdd);
   wordIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); onAdd(); } });
   wordIn.addEventListener("input", function () { showErr(""); updateAdd(); });
