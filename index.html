@@ -231,6 +231,16 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         </div>
       </div>
       <div id="result" hidden></div>
+      <div class="card form" id="bulkCard">
+        <div class="field">
+          <span class="label">Toplu ekle</span>
+          <p class="note">Kelimeleri alt alta (ya da virgülle) yapıştır. Her biri için tanım ve örnek cümle otomatik aranır. "happy - mutlu" gibi yazdıysan sadece İngilizce kısmı alınır, zaten kayıtlı olanlar atlanır.</p>
+          <textarea id="bulkText" rows="8" placeholder="happy&#10;solve&#10;reluctant" aria-label="Toplu kelime listesi" autocapitalize="none" autocorrect="off" spellcheck="false"></textarea>
+        </div>
+        <button class="btn primary block" id="bulkGo" type="button" disabled>Hepsini ekle</button>
+        <button class="btn ghost block" id="bulkStop" type="button" hidden>Durdur</button>
+        <p class="note" id="bulkStatus"></p>
+      </div>
     </section>
 
     <section id="v-kelimeler" class="view" aria-label="Kelimeler" hidden>
@@ -677,6 +687,78 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       h("div", { class: "row" }, regen,
         h("button", { class: "btn ghost small danger", type: "button", onclick: function () { removeCard(c.id); } }, "Geri al"))));
   }
+
+  /* ---------- Toplu ekle ---------- */
+  var bulkRun = false, bulkStop = false;
+  function parseBulk(text) {
+    var out = [], seen = {};
+    String(text || "").split(/\r?\n/).forEach(function (line) {
+      line = line.replace(/^[\s\-•*\d.)]+/, "");
+      line = line.split(/\s[-–—=:]\s|\t|\(|=|:/)[0];
+      line.split(/[,;]/).forEach(function (w) {
+        w = w.replace(/\s+/g, " ").trim();
+        var k = w.toLowerCase();
+        if (w && w.length <= 60 && /[a-z]/i.test(w) && !seen[k]) { seen[k] = 1; out.push(w); }
+      });
+    });
+    return out.slice(0, 300);
+  }
+  async function autoEntry(w) {
+    if (sampleState === "ok") {
+      try { var r = await generate(w); return { sentence: r.sentence, used: r.used, definition: r.definition }; }
+      catch (e) { if (GONE.indexOf(e && e.code) >= 0) sampleState = "off"; else return null; }
+    }
+    var found = null, wik = null;
+    try { found = await lookupWord(w); } catch (e) { found = null; }
+    var sent = (found && found.sentence) || "", def = (found && found.definition) || "";
+    if (!sent || !def) {
+      try { wik = await lookupWiktionary(w); } catch (e) { wik = null; }
+      if (!sent) sent = (wik && wik.sentence) || "";
+      if (!def) def = (wik && wik.definition) || "";
+    }
+    if (!sent) { try { sent = await lookupSentence(w); } catch (e) { sent = ""; } }
+    if (!def) return null;
+    return { sentence: sent, used: sent ? findUsed(sent, w) : w, definition: def };
+  }
+  function updateBulkBtn() { $("bulkGo").disabled = bulkRun || !parseBulk($("bulkText").value).length; }
+  async function runBulk() {
+    if (bulkRun) return;
+    var list = parseBulk($("bulkText").value);
+    if (!list.length) return;
+    bulkRun = true; bulkStop = false;
+    $("bulkGo").hidden = true; $("bulkStop").hidden = false; $("bulkText").readOnly = true;
+    var have = {}; cards.forEach(function (c) { have[c.word.toLowerCase()] = 1; });
+    var added = 0, dup = 0, noSent = 0, left = [], i = 0;
+    for (; i < list.length; i++) {
+      if (bulkStop) break;
+      var w = list[i];
+      $("bulkStatus").textContent = (i + 1) + "/" + list.length + " · " + w + "…";
+      if (have[w.toLowerCase()]) { dup++; continue; }
+      var e = null;
+      try { e = await autoEntry(w); } catch (x) { e = null; }
+      if (e && e.definition) {
+        var now = Date.now();
+        saveCard({ id: newId(), word: w, sentence: e.sentence || "", used: e.used || w, meaning: e.definition, created: now, due: now, interval: 0, ease: 2.5, reps: 0, lapses: 0, reviews: 0 });
+        have[w.toLowerCase()] = 1; added++;
+        if (!e.sentence) noSent++;
+      } else left.push(w);
+      await new Promise(function (r) { setTimeout(r, 200); });
+    }
+    var rest = list.slice(i);
+    $("bulkText").value = left.concat(rest).join("\n");
+    bulkRun = false; $("bulkText").readOnly = false;
+    $("bulkGo").hidden = false; $("bulkStop").hidden = true;
+    var msg = added + " kelime eklendi";
+    if (noSent) msg += " (" + noSent + " tanesinde cümle bulunamadı)";
+    if (dup) msg += ", " + dup + " tanesi zaten kayıtlıydı";
+    if (left.length) msg += ", " + left.length + " tanesi bulunamadı (kutuda kaldı)";
+    if (rest.length) msg += ", " + rest.length + " tanesi işlenmedi (kutuda kaldı)";
+    $("bulkStatus").textContent = msg + ".";
+    updateBulkBtn(); updateAdd();
+  }
+  $("bulkText").addEventListener("input", updateBulkBtn);
+  $("bulkGo").addEventListener("click", runBulk);
+  $("bulkStop").addEventListener("click", function () { bulkStop = true; $("bulkStatus").textContent = "Durduruluyor…"; });
 
   $("noSent").addEventListener("click", function () {
     var w = wordIn.value.trim(), d = defIn.value.trim();
