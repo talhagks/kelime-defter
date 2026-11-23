@@ -131,14 +131,14 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px;
   background: var(--surface); border-top: 1px solid var(--line);
   padding-top: 6px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
 }
-.tab { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 4px 0; background: none; border: 0; border-radius: 12px; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.tab { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 4px 0; background: none; border: 0; border-radius: 12px; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; }
 .tab[aria-current="page"] { color: var(--accent); }
 
 .defn { margin: 0; font-weight: 500; color: var(--accent); overflow-wrap: anywhere; }
@@ -178,6 +178,12 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .rs span { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rs:hover, .rs:focus-visible { background: var(--soft); }
 .results .empty { padding: 14px; }
+.wchip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pcplayer { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; }
+.pcplayer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.pcbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pcbar .note { flex: 1; min-width: 120px; }
+.pcadd { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -274,6 +280,35 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       <p class="note" id="gNote"></p>
       <div id="gList" class="list"></div>
     </section>
+
+    <section id="v-podcast" class="view" aria-label="Podcast" hidden>
+      <div class="card form">
+        <div class="field">
+          <span class="label">Günlük podcast</span>
+          <div class="chips" id="pcChips"></div>
+        </div>
+        <div class="pcplayer" id="pcPlayer"></div>
+        <div class="pcbar">
+          <button class="btn small primary" id="pcDone" type="button">Bugün izledim</button>
+          <p class="note" id="pcStreak"></p>
+        </div>
+        <div class="pcbar">
+          <a class="out" id="pcOpen" href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">YouTube'da aç</a>
+          <button class="btn ghost small danger" id="pcDel" type="button" hidden>Bu kaynağı sil</button>
+        </div>
+        <p class="note">Her açılışta kanalın en yeni videosu başlar. İngilizce altyazı açık gelir.</p>
+      </div>
+      <div class="card form">
+        <div class="field">
+          <label class="label" for="pcUrl">Kendi podcast / video linkin</label>
+          <div class="pcadd">
+            <input id="pcUrl" type="text" placeholder="YouTube video, liste linki veya UC… kanal kimliği" autocapitalize="none" autocomplete="off" spellcheck="false" enterkeyhint="go">
+            <button class="btn ghost small" id="pcAdd" type="button">Ekle</button>
+          </div>
+          <p class="note err" id="pcErr" hidden></p>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -297,6 +332,10 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   <button class="tab" data-view="grammar" type="button">
     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H19v14H6.5A1.5 1.5 0 0 0 5 19.5v-14z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 8.5h6M9 12h4"/></svg>
     <span>Grammar</span>
+  </button>
+  <button class="tab" data-view="podcast" type="button">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M10 8.8l5 3.2-5 3.2z"/></svg>
+    <span>Podcast</span>
   </button>
 </nav>
 <div id="toast" role="status" hidden></div>
@@ -970,6 +1009,95 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   gBody.addEventListener("input", gUpdateBtn);
   $("gSearch").addEventListener("input", gRender);
 
+  /* ---------- Podcast (YouTube) ---------- */
+  var LSP = "kelime-defteri-podcast-v1";
+  var PC_DEFAULT = [
+    { id: "mbd", name: "Morning Brew Daily", type: "list", ref: "UUJGeBpBh9_Q0B_EKPmj14Pg", open: "https://www.youtube.com/@MorningBrewDailyShow" },
+    { id: "ted", name: "TED", type: "list", ref: "UUAuUUnT6oDeKwE6v1NGQxug", open: "https://www.youtube.com/@TED" }
+  ];
+  var pc = { sel: "mbd", custom: [], done: [] }, pcShown = null;
+  try {
+    var pcRaw = JSON.parse(localStorage.getItem(LSP) || "null");
+    if (pcRaw && typeof pcRaw === "object") pc = Object.assign(pc, pcRaw);
+  } catch (e) {}
+  if (!Array.isArray(pc.custom)) pc.custom = [];
+  if (!Array.isArray(pc.done)) pc.done = [];
+
+  function pcSave() { try { localStorage.setItem(LSP, JSON.stringify(pc)); } catch (e) {} }
+  function pcSources() { return PC_DEFAULT.concat(pc.custom); }
+  function pcCurrent() {
+    var all = pcSources();
+    return all.find(function (x) { return x.id === pc.sel; }) || all[0];
+  }
+  function dayKey(d) {
+    d = d || new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function pcStreak() {
+    var set = new Set(pc.done), d = new Date(), n = 0;
+    if (!set.has(dayKey(d))) d.setDate(d.getDate() - 1);
+    while (set.has(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+  function pcParse(text) {
+    var t = text.trim(), l = /[?&]list=([A-Za-z0-9_-]+)/.exec(t), v = /(?:[?&]v=|youtu\.be\/|embed\/|shorts\/|live\/)([A-Za-z0-9_-]{11})/.exec(t), c = /(UC[A-Za-z0-9_-]{22})/.exec(t);
+    if (v) return { type: "video", ref: v[1], list: l ? l[1] : "", name: "Özel video", open: "https://www.youtube.com/watch?v=" + v[1] };
+    if (l) return { type: "list", ref: l[1], name: "Özel liste", open: "https://www.youtube.com/playlist?list=" + l[1] };
+    if (c) return { type: "list", ref: "UU" + c[1].slice(2), name: "Özel kanal", open: "https://www.youtube.com/channel/" + c[1] };
+    return null;
+  }
+  function pcSrc(s) {
+    var q = "rel=0&playsinline=1&cc_load_policy=1&hl=en";
+    if (s.type === "video") return "https://www.youtube-nocookie.com/embed/" + s.ref + "?" + q + (s.list ? "&list=" + s.list : "");
+    return "https://www.youtube-nocookie.com/embed/videoseries?list=" + s.ref + "&" + q;
+  }
+  function pcRender() {
+    var s = pcCurrent();
+    var chips = $("pcChips");
+    chips.replaceChildren.apply(chips, pcSources().map(function (x) {
+      return h("button", { class: "wchip", type: "button", "aria-pressed": x.id === s.id ? "true" : "false", onclick: function () { pc.sel = x.id; pcSave(); pcRender(); } }, x.name);
+    }));
+    var key = s.id + ":" + s.ref;
+    if (pcShown !== key) {
+      pcShown = key;
+      $("pcPlayer").replaceChildren(h("iframe", {
+        src: pcSrc(s), title: s.name, loading: "lazy", allowfullscreen: true,
+        allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+        referrerpolicy: "strict-origin-when-cross-origin"
+      }));
+    }
+    $("pcOpen").href = s.open;
+    $("pcDel").hidden = !s.custom;
+    var done = pc.done.indexOf(dayKey()) >= 0, st = pcStreak();
+    $("pcDone").textContent = done ? "Bugün izlendi ✓" : "Bugün izledim";
+    $("pcDone").className = "btn small " + (done ? "ghost" : "primary");
+    $("pcStreak").textContent = st ? st + " gün üst üste" : "Bugün ilk gün olsun";
+  }
+  $("pcDone").addEventListener("click", function () {
+    var k = dayKey(), i = pc.done.indexOf(k);
+    if (i >= 0) pc.done.splice(i, 1); else pc.done.push(k);
+    pc.done = pc.done.slice(-400);
+    pcSave(); pcRender();
+  });
+  $("pcDel").addEventListener("click", function () {
+    var cur = pcCurrent();
+    pc.custom = pc.custom.filter(function (x) { return x.id !== cur.id; });
+    pc.sel = "mbd"; pcSave(); pcRender();
+  });
+  function pcAdd() {
+    var p = pcParse($("pcUrl").value), err = $("pcErr");
+    if (!p) {
+      err.textContent = "Link anlaşılamadı. Video veya liste linki, ya da UC ile başlayan kanal kimliği yapıştır (@kanal adı çalışmaz).";
+      err.hidden = false; return;
+    }
+    err.hidden = true;
+    p.id = "c" + Date.now().toString(36); p.custom = true;
+    pc.custom.push(p); pc.sel = p.id; pcSave();
+    $("pcUrl").value = ""; pcRender();
+  }
+  $("pcAdd").addEventListener("click", pcAdd);
+  $("pcUrl").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); pcAdd(); } });
+
   /* ---------- shell ---------- */
   function updateHeader() {
     var now = Date.now();
@@ -978,7 +1106,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
   function refreshAll() { updateHeader(); updateStudy(); updateList(); updateAdd(); renderResult(); renderStudySearch(); renderTSearch(); }
 
-  var VIEWS = ["telaffuz", "calis", "ekle", "kelimeler", "grammar"];
+  var VIEWS = ["telaffuz", "calis", "ekle", "kelimeler", "grammar", "podcast"];
   function setView(v, fromHash) {
     if (VIEWS.indexOf(v) < 0) v = "calis";
     view = v;
@@ -989,6 +1117,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     if (v === "calis") updateStudy();
     if (v === "kelimeler") updateList();
     if (v === "grammar") gRender();
+    if (v === "podcast") pcRender();
     if (!fromHash) { try { if (location.hash.slice(1) !== v) location.hash = v; } catch (e) {} }
     window.scrollTo(0, 0);
   }
