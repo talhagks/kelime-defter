@@ -301,49 +301,38 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
           <span class="label">Günlük podcast</span>
           <div class="chips" id="pcChips"></div>
         </div>
-        <div class="pcplayer" id="pcPlayer"></div>
+        <div id="mdPlayer"></div>
         <div class="pcbar">
           <button class="btn small primary" id="pcDone" type="button">Bugün izledim</button>
           <p class="note" id="pcStreak"></p>
         </div>
         <div class="pcbar">
-          <a class="out" id="pcOpen" href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">YouTube'da aç</a>
+          <a class="out" id="pcOpen" href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">Kaynağı aç</a>
           <button class="btn ghost small danger" id="pcDel" type="button" hidden>Bu kaynağı sil</button>
         </div>
-        <p class="note">Her açılışta kanalın en yeni videosu başlar. İngilizce altyazı açık gelir.</p>
+        <p class="note" id="mdStatus"></p>
+        <div class="mdmsg" id="mdMsg" hidden role="status"></div>
+        <button class="btn primary block" id="mdTranscribe" type="button" hidden>Altyazı oluştur (Whisper)</button>
+        <div class="mdtrans" id="mdTrans" hidden></div>
+        <p class="note">Altyazı oynatıcının altında kendiliğinden çıkar. Bir kelimeye dokununca oynatma durur; kelime listende yoksa tanımı ve örnek cümlesiyle eklenir. Ses kaynakları (BBC gibi) telefon kilitlenince de çalar; YouTube videoları kilitlenince durur.</p>
       </div>
       <div class="card form">
         <div class="field">
           <label class="label" for="pcUrl">Kendi podcast / video linkin</label>
           <div class="pcadd">
-            <input id="pcUrl" type="text" placeholder="YouTube video, liste linki veya UC… kanal kimliği" autocapitalize="none" autocomplete="off" spellcheck="false" enterkeyhint="go">
+            <input id="pcUrl" type="text" placeholder="YouTube, mp3 veya podcast RSS linki" autocapitalize="none" autocomplete="off" spellcheck="false" enterkeyhint="go">
             <button class="btn ghost small" id="pcAdd" type="button">Ekle</button>
           </div>
           <p class="note err" id="pcErr" hidden></p>
-        </div>
-      </div>
-      <div class="card form" id="mdCard">
-        <div class="field">
-          <label class="label" for="mdUrl">Altyazılı oynatıcı</label>
-          <div class="pcadd">
-            <input id="mdUrl" type="text" placeholder="YouTube veya .mp3 / .mp4 bağlantısı" autocapitalize="none" autocomplete="off" spellcheck="false" enterkeyhint="go">
-            <button class="btn ghost small" id="mdLoad" type="button">Yükle</button>
-          </div>
           <input id="mdFile" type="file" accept="audio/*,video/*" hidden>
           <button class="btn ghost small" id="mdPick" type="button">veya dosya seç</button>
-          <p class="note">Altyazıdaki bir kelimeye dokununca oynatma durur; kelime listene bakılır, yoksa tanımı ve örnek cümlesiyle otomatik eklenir.</p>
         </div>
+      </div>
+      <div class="card form">
         <div class="field">
           <label class="label" for="mdKey">OpenAI API anahtarı</label>
           <input id="mdKey" type="password" placeholder="sk-…" autocapitalize="none" autocomplete="off" spellcheck="false">
-          <p class="note">Whisper altyazısı ve yapay zeka tanımı için. Anahtar yalnızca bu tarayıcıda saklanır, sadece api.openai.com'a gönderilir.</p>
-        </div>
-        <p class="note" id="mdStatus"></p>
-        <div class="mdmsg" id="mdMsg" hidden role="status"></div>
-        <div class="form" id="mdStage" hidden>
-          <div id="mdPlayer"></div>
-          <button class="btn primary block" id="mdTranscribe" type="button" hidden>Altyazı oluştur (Whisper)</button>
-          <div class="mdtrans" id="mdTrans" hidden></div>
+          <p class="note">Ses podcastlerinde altyazıyı Whisper çıkarır (yaklaşık dakikası 0,6 sent). Anahtar yalnızca bu tarayıcıda saklanır, sadece api.openai.com'a gönderilir. Altyazı bir kez çıkarılınca saklanır.</p>
         </div>
       </div>
     </section>
@@ -1100,19 +1089,21 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   gBody.addEventListener("input", gUpdateBtn);
   $("gSearch").addEventListener("input", gRender);
 
-  /* ---------- Podcast (YouTube) ---------- */
-  var LSP = "kelime-defteri-podcast-v1";
+  /* ---------- Podcast + altyazılı oynatıcı ---------- */
+  var LSP = "kelime-defteri-podcast-v1", LSM = "kelime-defteri-media-v1", LSK = "kelime-defteri-openai-key", CH = 24 * 1024 * 1024;
   var PC_DEFAULT = [
-    { id: "mbd", name: "Morning Brew Daily", type: "list", ref: "UUJGeBpBh9_Q0B_EKPmj14Pg", open: "https://www.youtube.com/@MorningBrewDailyShow" },
-    { id: "ted", name: "TED", type: "list", ref: "UUAuUUnT6oDeKwE6v1NGQxug", open: "https://www.youtube.com/@TED" }
+    { id: "bbc", name: "BBC 6 Minute English", kind: "rss", url: "https://podcasts.files.bbci.co.uk/p02pc9tn.rss", open: "https://www.bbc.co.uk/learningenglish/english/features/6-minute-english" },
+    { id: "mbd", name: "Morning Brew Daily", kind: "ytlist", ref: "UUJGeBpBh9_Q0B_EKPmj14Pg", open: "https://www.youtube.com/@MorningBrewDailyShow" },
+    { id: "ted", name: "TED", kind: "ytlist", ref: "UUAuUUnT6oDeKwE6v1NGQxug", open: "https://www.youtube.com/@TED" }
   ];
-  var pc = { sel: "mbd", custom: [], done: [] }, pcShown = null;
+  var pc = { sel: "bbc", custom: [], done: [], v: 2 }, pcShown = null, pcFile = false;
   try {
     var pcRaw = JSON.parse(localStorage.getItem(LSP) || "null");
-    if (pcRaw && typeof pcRaw === "object") pc = Object.assign(pc, pcRaw);
+    if (pcRaw && typeof pcRaw === "object") { pc = Object.assign(pc, pcRaw); if (pcRaw.v !== 2) { pc.sel = "bbc"; pc.v = 2; } }
   } catch (e) {}
   if (!Array.isArray(pc.custom)) pc.custom = [];
   if (!Array.isArray(pc.done)) pc.done = [];
+  pc.custom.forEach(function (x) { if (!x.kind) x.kind = x.type === "video" ? "ytvideo" : "ytlist"; });
 
   function pcSave() { try { localStorage.setItem(LSP, JSON.stringify(pc)); } catch (e) {} }
   function pcSources() { return PC_DEFAULT.concat(pc.custom); }
@@ -1132,71 +1123,27 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
   function pcParse(text) {
     var t = text.trim(), l = /[?&]list=([A-Za-z0-9_-]+)/.exec(t), v = /(?:[?&]v=|youtu\.be\/|embed\/|shorts\/|live\/)([A-Za-z0-9_-]{11})/.exec(t), c = /(UC[A-Za-z0-9_-]{22})/.exec(t);
-    if (v) return { type: "video", ref: v[1], list: l ? l[1] : "", name: "Özel video", open: "https://www.youtube.com/watch?v=" + v[1] };
-    if (l) return { type: "list", ref: l[1], name: "Özel liste", open: "https://www.youtube.com/playlist?list=" + l[1] };
-    if (c) return { type: "list", ref: "UU" + c[1].slice(2), name: "Özel kanal", open: "https://www.youtube.com/channel/" + c[1] };
+    if (/youtu/i.test(t)) {
+      if (v) return { kind: "ytvideo", ref: v[1], name: "Özel video", open: "https://www.youtube.com/watch?v=" + v[1] };
+      if (l) return { kind: "ytlist", ref: l[1], name: "Özel liste", open: "https://www.youtube.com/playlist?list=" + l[1] };
+      if (c) return { kind: "ytlist", ref: "UU" + c[1].slice(2), name: "Özel kanal", open: "https://www.youtube.com/channel/" + c[1] };
+      return null;
+    }
+    if (/^UC[A-Za-z0-9_-]{22}$/.test(t)) return { kind: "ytlist", ref: "UU" + t.slice(2), name: "Özel kanal", open: "https://www.youtube.com/channel/" + t };
+    if (/^https?:\/\//i.test(t)) {
+      if (/\.(mp3|m4a|aac|wav|ogg|opus|mp4|webm|m4v|mov)(?:[?#]|$)/i.test(t)) return { kind: "audio", url: t, name: "Özel ses", open: t };
+      return { kind: "rss", url: t, name: "Özel podcast", open: t };
+    }
     return null;
   }
-  function pcSrc(s) {
-    var q = "rel=0&playsinline=1&cc_load_policy=1&hl=en";
-    if (s.type === "video") return "https://www.youtube-nocookie.com/embed/" + s.ref + "?" + q + (s.list ? "&list=" + s.list : "");
-    return "https://www.youtube-nocookie.com/embed/videoseries?list=" + s.ref + "&" + q;
-  }
-  function pcRender() {
-    var s = pcCurrent();
-    var chips = $("pcChips");
-    chips.replaceChildren.apply(chips, pcSources().map(function (x) {
-      return h("button", { class: "wchip", type: "button", "aria-pressed": x.id === s.id ? "true" : "false", onclick: function () { pc.sel = x.id; pcSave(); pcRender(); } }, x.name);
-    }));
-    var key = s.id + ":" + s.ref;
-    if (pcShown !== key) {
-      pcShown = key;
-      $("pcPlayer").replaceChildren(h("iframe", {
-        src: pcSrc(s), title: s.name, loading: "lazy", allowfullscreen: true,
-        allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
-        referrerpolicy: "strict-origin-when-cross-origin"
-      }));
-    }
-    $("pcOpen").href = s.open;
-    $("pcDel").hidden = !s.custom;
-    var done = pc.done.indexOf(dayKey()) >= 0, st = pcStreak();
-    $("pcDone").textContent = done ? "Bugün izlendi ✓" : "Bugün izledim";
-    $("pcDone").className = "btn small " + (done ? "ghost" : "primary");
-    $("pcStreak").textContent = st ? st + " gün üst üste" : "Bugün ilk gün olsun";
-  }
-  $("pcDone").addEventListener("click", function () {
-    var k = dayKey(), i = pc.done.indexOf(k);
-    if (i >= 0) pc.done.splice(i, 1); else pc.done.push(k);
-    pc.done = pc.done.slice(-400);
-    pcSave(); pcRender();
-  });
-  $("pcDel").addEventListener("click", function () {
-    var cur = pcCurrent();
-    pc.custom = pc.custom.filter(function (x) { return x.id !== cur.id; });
-    pc.sel = "mbd"; pcSave(); pcRender();
-  });
-  function pcAdd() {
-    var p = pcParse($("pcUrl").value), err = $("pcErr");
-    if (!p) {
-      err.textContent = "Link anlaşılamadı. Video veya liste linki, ya da UC ile başlayan kanal kimliği yapıştır (@kanal adı çalışmaz).";
-      err.hidden = false; return;
-    }
-    err.hidden = true;
-    p.id = "c" + Date.now().toString(36); p.custom = true;
-    pc.custom.push(p); pc.sel = p.id; pcSave();
-    $("pcUrl").value = ""; pcRender();
-  }
-  $("pcAdd").addEventListener("click", pcAdd);
-  $("pcUrl").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); pcAdd(); } });
 
-  /* ---------- Medya oynatıcı (altyazı + kelime ekleme) ---------- */
-  var LSM = "kelime-defteri-media-v1", LSK = "kelime-defteri-openai-key", MAXB = 25 * 1024 * 1024;
-  var md = { kind: "", src: "", url: "", id: "", file: null, obj: "", yt: null, ytReady: null, el: null, segs: [], active: -1, poll: 0, busy: false, adding: false, gen: 0 };
   var mdCache = {};
   try { mdCache = JSON.parse(localStorage.getItem(LSM) || "{}") || {}; } catch (e) { mdCache = {}; }
+  var md = { kind: "", src: "", url: "", file: null, obj: "", yt: null, ytReady: null, ytId: "", el: null, segs: [], active: -1, poll: 0, busy: false, adding: false, gen: 0, sub: null };
   function mdKey() { try { return localStorage.getItem(LSK) || ""; } catch (e) { return ""; } }
   $("mdKey").value = mdKey();
   $("mdKey").addEventListener("input", function () { try { localStorage.setItem(LSK, $("mdKey").value.trim()); } catch (e) {} });
+  $("mdKey").addEventListener("change", function () { if (md.sub && !md.segs.length && !md.busy && md.kind !== "yt") mdSubs(md.sub); });
   function mdSaveCache(key, segs) {
     mdCache[key] = { t: Date.now(), segs: segs };
     Object.keys(mdCache).sort(function (a, b) { return mdCache[b].t - mdCache[a].t; }).slice(8).forEach(function (k) { delete mdCache[k]; });
@@ -1217,7 +1164,20 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       else if (md.el) { md.el.currentTime = t; var p = md.el.play(); if (p && p.catch) p.catch(function () {}); }
     } catch (e) {}
   }
+  function mdYtWatch() {
+    if (!md.yt || typeof md.yt.getVideoData !== "function") return;
+    var d; try { d = md.yt.getVideoData(); } catch (e) { return; }
+    var id = d && d.video_id;
+    if (!id || id === md.ytId) return;
+    md.ytId = id; md.src = "yt:" + id; md.segs = []; md.active = -1;
+    $("mdTrans").replaceChildren(); $("mdTrans").hidden = true; mdMsg("");
+    $("pcOpen").href = "https://www.youtube.com/watch?v=" + id;
+    var hit = mdCache[md.src];
+    if (hit) { mdShow(hit.segs); mdStatus("Altyazı önbellekten yüklendi."); }
+    else { mdStatus("YouTube altyazısı alınıyor…"); mdYtRun(id, md.gen); }
+  }
   function mdTick() {
+    mdYtWatch();
     var t = mdTime(), segs = md.segs, idx = -1;
     for (var i = 0; i < segs.length; i++) { if (segs[i].s <= t + 0.15) idx = i; else break; }
     if (idx === md.active) return;
@@ -1232,9 +1192,10 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     if (md.yt && md.yt.destroy) { try { md.yt.destroy(); } catch (e) {} }
     try { if (md.el) md.el.pause(); } catch (e) {}
     if (md.obj) { try { URL.revokeObjectURL(md.obj); } catch (e) {} }
-    md.yt = null; md.el = null; md.obj = ""; md.segs = []; md.active = -1;
+    try { if ("mediaSession" in navigator) navigator.mediaSession.metadata = null; } catch (e) {}
+    md.yt = null; md.ytId = ""; md.el = null; md.obj = ""; md.segs = []; md.active = -1; md.sub = null; md.file = null; md.url = ""; md.kind = ""; md.src = "";
     $("mdPlayer").replaceChildren(); $("mdTrans").replaceChildren(); $("mdTrans").hidden = true;
-    $("mdTranscribe").hidden = true; $("mdStage").hidden = true;
+    $("mdTranscribe").hidden = true;
     mdMsg(""); mdStatus("");
   }
   function mdMountMedia(src) {
@@ -1244,6 +1205,17 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     md.el = el;
     $("mdPlayer").append(md.kind === "video" ? h("div", { class: "pcplayer" }, el) : el);
     md.poll = setInterval(mdTick, 250);
+  }
+  function mdMediaSession(o) {
+    if (!("mediaSession" in navigator) || !md.el) return;
+    var el = md.el;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: o.title || "Podcast", artist: o.show || "", artwork: o.art ? [{ src: o.art, sizes: "512x512" }] : [] });
+      navigator.mediaSession.setActionHandler("play", function () { el.play(); });
+      navigator.mediaSession.setActionHandler("pause", function () { el.pause(); });
+      navigator.mediaSession.setActionHandler("seekbackward", function () { el.currentTime = Math.max(0, el.currentTime - 10); });
+      navigator.mediaSession.setActionHandler("seekforward", function () { el.currentTime = el.currentTime + 10; });
+    } catch (e) {}
   }
   function mdYtApi() {
     if (window.YT && window.YT.Player) return Promise.resolve();
@@ -1259,15 +1231,54 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     });
     return md.ytReady;
   }
-  function mdMountYt(id) {
+  function mdMountYt(o) {
     var gen = md.gen;
+    md.kind = "yt";
+    mdStatus("Video hazırlanıyor…");
     $("mdPlayer").append(h("div", { class: "pcplayer" }, h("div", { id: "mdYT" })));
     mdYtApi().then(function () {
       if (gen !== md.gen) return;
-      md.yt = new window.YT.Player("mdYT", { host: "https://www.youtube-nocookie.com", videoId: id, playerVars: { playsinline: 1, rel: 0, hl: "en" } });
+      var pv = { playsinline: 1, rel: 0, hl: "en", cc_load_policy: 0 }, opt = { host: "https://www.youtube-nocookie.com", playerVars: pv };
+      if (o.list) { pv.listType = "playlist"; pv.list = o.list; } else opt.videoId = o.video;
+      md.yt = new window.YT.Player("mdYT", opt);
       md.poll = setInterval(mdTick, 250);
-    }).catch(function () { if (gen === md.gen) mdMsg("YouTube oynatıcı yüklenemedi.", "err"); });
+    }).catch(function () { if (gen === md.gen) { mdStatus(""); mdMsg("YouTube oynatıcı yüklenemedi.", "err"); } });
   }
+
+  function parseCues(txt) {
+    var segs = [], re = /(\d+:)?(\d{2}):(\d{2})[.,](\d{3})\s*-->\s*(\d+:)?(\d{2}):(\d{2})[.,](\d{3})[^\n]*\n([\s\S]*?)(?:\n\s*\n|$)/g, m, s = txt.replace(/\r/g, "");
+    function sec(hh, mi, ss, ms) { return (hh ? parseInt(hh, 10) : 0) * 3600 + Number(mi) * 60 + Number(ss) + Number(ms) / 1000; }
+    while ((m = re.exec(s))) {
+      var t = m[9].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+      if (t) segs.push({ s: sec(m[1], m[2], m[3], m[4]), e: sec(m[5], m[6], m[7], m[8]), t: t });
+    }
+    return segs;
+  }
+  async function mdFetchCues(url) {
+    var t = "";
+    try { var r = await fetch(url); if (r.ok) t = await r.text(); } catch (e) {}
+    for (var i = 0; i < 2 && !t; i++) t = await fetchText(PROXIES[i](url), 10000);
+    var segs = t ? parseCues(t) : [];
+    return segs.length > 3 ? segs : null;
+  }
+  async function rssLatest(url) {
+    var xml = "";
+    try { var r = await fetch(url); if (r.ok) xml = await r.text(); } catch (e) {}
+    for (var i = 0; i < PROXIES.length && xml.indexOf("<item") < 0; i++) xml = await fetchText(PROXIES[i](url), 10000);
+    if (xml.indexOf("<item") < 0) throw new Error("feed");
+    var doc = new DOMParser().parseFromString(xml, "text/xml"), items = doc.getElementsByTagName("item"), it = null, enc = null;
+    for (var k = 0; k < items.length && !enc; k++) { it = items[k]; enc = it.getElementsByTagName("enclosure")[0]; }
+    if (!enc || !enc.getAttribute("url")) throw new Error("no enclosure");
+    var ti = it.getElementsByTagName("title")[0], ch = doc.getElementsByTagName("channel")[0];
+    var sh = ch && ch.getElementsByTagName("title")[0];
+    var img = it.getElementsByTagName("itunes:image")[0] || (ch && ch.getElementsByTagName("itunes:image")[0]);
+    var tr = null, trs = it.getElementsByTagName("podcast:transcript");
+    for (var j = 0; j < trs.length; j++) {
+      if (/vtt|srt|subrip/i.test((trs[j].getAttribute("type") || "") + (trs[j].getAttribute("url") || ""))) { tr = trs[j].getAttribute("url"); break; }
+    }
+    return { url: enc.getAttribute("url").replace(/^http:\/\//i, "https://"), title: ti ? ti.textContent.trim() : "", show: sh ? sh.textContent.trim() : "", art: img ? (img.getAttribute("href") || "") : "", transcript: tr };
+  }
+
   async function mdYtCaptions(id) {
     var html = "", i, t;
     for (i = 0; i < PROXIES.length && !html; i++) {
@@ -1302,12 +1313,12 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   async function mdYtRun(id, gen) {
     try {
       var segs = await mdYtCaptions(id);
-      if (gen !== md.gen) return;
+      if (gen !== md.gen || md.ytId !== id) return;
       mdSaveCache("yt:" + id, segs); mdShow(segs); mdStatus("YouTube altyazısı yüklendi.");
     } catch (e) {
-      if (gen !== md.gen) return;
+      if (gen !== md.gen || md.ytId !== id) return;
       mdStatus("");
-      mdMsg("YouTube altyazısı alınamadı (YouTube'un sesi tarayıcıdan doğrudan alınamıyor). Sesi mp3 olarak indirip “veya dosya seç” ile yükle; Whisper altyazıyı çıkarır.", "warn");
+      mdMsg("Bu videonun altyazısı alınamadı. Altyazı ve ekran kapalıyken çalma için “BBC 6 Minute English” gibi bir ses kaynağı seç, ya da sesi mp3 olarak indirip “dosya seç” ile yükle.", "warn");
     }
   }
   function mdShow(segs) {
@@ -1411,15 +1422,19 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     return "audio." + (map[(blob.type || "").split(";")[0]] || "mp3");
   }
   async function mdFetchBlob(url) {
-    var r;
-    try { r = await fetch(url); } catch (e) { throw { msg: "Bu bağlantı tarayıcıdan indirilemiyor (CORS engeli). Dosyayı indirip “veya dosya seç” ile yükle." }; }
-    if (!r.ok) throw { msg: "Medya indirilemedi (" + r.status + ")." };
-    if (+r.headers.get("content-length") > MAXB) throw { msg: "Dosya 25 MB'tan büyük; Whisper bu sınırı kabul ediyor. Daha kısa ya da düşük bitrate'li bir dosya kullan." };
-    return await r.blob();
+    var tries = [url].concat(PROXIES.slice(0, 2).map(function (p) { return p(url); }));
+    for (var i = 0; i < tries.length; i++) {
+      var ctl = new AbortController(), tm = setTimeout(function () { ctl.abort(); }, 90000);
+      try {
+        var r = await fetch(tries[i], { signal: ctl.signal });
+        if (!r.ok) continue;
+        var b = await r.blob();
+        if (b.size > 20000 && !/text\/|json/.test(b.type)) return b;
+      } catch (e) {} finally { clearTimeout(tm); }
+    }
+    throw { msg: "Ses dosyası tarayıcıdan indirilemedi (site izin vermiyor). Dosyayı indirip “dosya seç” ile yükle." };
   }
-  async function mdWhisper(blob, name) {
-    if (!mdKey()) throw { msg: "Altyazı için önce OpenAI API anahtarını gir." };
-    if (blob.size > MAXB) throw { msg: "Dosya 25 MB'tan büyük; Whisper bu sınırı kabul ediyor. Daha kısa ya da düşük bitrate'li bir dosya kullan." };
+  async function mdWhisperOne(blob, name) {
     var fd = new FormData();
     fd.append("file", blob, mdFileName(name, blob));
     fd.append("model", "whisper-1");
@@ -1435,56 +1450,144 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     var j = await r.json();
     var segs = (j.segments || []).map(function (s) { return { s: s.start, e: s.end, t: String(s.text || "").trim() }; }).filter(function (s) { return s.t; });
     if (!segs.length && j.text) segs = [{ s: 0, e: j.duration || 0, t: String(j.text).trim() }];
-    if (!segs.length) throw { msg: "Konuşma algılanamadı." };
     return segs;
   }
-
-  function mdOpen(raw, file) {
-    mdStop();
-    md.file = file || null; md.url = ""; md.id = "";
-    var t = (raw || "").trim();
-    if (file) {
-      md.kind = /^video\//.test(file.type) ? "video" : "audio";
-      md.src = "file:" + file.name + ":" + file.size;
-      md.obj = URL.createObjectURL(file);
-      mdMountMedia(md.obj);
-    } else {
-      var yv = /youtu/i.test(t) && /(?:[?&]v=|youtu\.be\/|embed\/|shorts\/|live\/)([A-Za-z0-9_-]{11})/.exec(t);
-      if (yv) { md.kind = "yt"; md.id = yv[1]; md.src = "yt:" + yv[1]; mdMountYt(yv[1]); }
-      else if (/^https?:\/\//i.test(t)) {
-        md.kind = /\.(mp4|webm|mov|m4v|ogv)(?:[?#]|$)/i.test(t) ? "video" : "audio";
-        md.url = t; md.src = t; mdMountMedia(t);
-      } else { mdMsg("Geçerli bir YouTube veya medya bağlantısı (http…) yapıştır.", "err"); return; }
+  async function mdWhisper(blob, name) {
+    if (!mdKey()) throw { msg: "Altyazı için önce OpenAI API anahtarını gir (aşağıdaki kutu)." };
+    var mp3 = /\.mp3(?:[?#]|$)/i.test(name || "") || /mpeg|mp3/.test(blob.type || "");
+    if (blob.size > CH && !mp3) throw { msg: "Dosya 25 MB'tan büyük ve mp3 değil; Whisper bu sınırı kabul ediyor. Daha küçük bir dosya kullan." };
+    var n = Math.ceil(blob.size / CH), dur = md.el && isFinite(md.el.duration) ? md.el.duration : 0, all = [], off = 0;
+    for (var i = 0; i < n; i++) {
+      if (n > 1) mdStatus("Whisper ile metne çevriliyor… (" + (i + 1) + "/" + n + ")");
+      var part = n > 1 ? blob.slice(i * CH, Math.min(blob.size, (i + 1) * CH), "audio/mpeg") : blob;
+      var segs = await mdWhisperOne(part, n > 1 ? "part" + i + ".mp3" : name);
+      var start = n > 1 ? (dur ? dur * (i * CH) / blob.size : off) : 0;
+      segs.forEach(function (s) { s.s += start; s.e += start; });
+      if (segs.length) off = segs[segs.length - 1].e;
+      all = all.concat(segs);
     }
-    $("mdStage").hidden = false;
-    var hit = mdCache[md.src];
-    if (hit) { mdShow(hit.segs); mdStatus("Altyazı önbellekten yüklendi."); return; }
-    if (md.kind === "yt") { mdStatus("YouTube altyazısı alınıyor…"); mdYtRun(md.id, md.gen); }
-    else { $("mdTranscribe").hidden = false; mdStatus("Altyazı için “Altyazı oluştur” düğmesine bas."); }
+    if (!all.length) throw { msg: "Konuşma algılanamadı." };
+    return all;
   }
-  $("mdLoad").addEventListener("click", function () { mdOpen($("mdUrl").value); });
-  $("mdUrl").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); mdOpen($("mdUrl").value); } });
-  $("mdPick").addEventListener("click", function () { $("mdFile").click(); });
-  $("mdFile").addEventListener("change", function () {
-    var f = this.files && this.files[0];
-    if (f) mdOpen("", f);
-    this.value = "";
-  });
-  $("mdTranscribe").addEventListener("click", async function () {
+  async function mdRunWhisper() {
     if (md.busy) return;
-    var btn = this, gen = md.gen, src = md.src;
+    var btn = $("mdTranscribe"), gen = md.gen, src = md.src;
     md.busy = true; btn.disabled = true; btn.textContent = "Çevriliyor…"; mdMsg("");
     try {
       mdStatus("Ses dosyası alınıyor…");
       var blob = md.file || await mdFetchBlob(md.url);
+      if (gen !== md.gen) return;
       mdStatus("Whisper ile metne çevriliyor… (birkaç dakika sürebilir)");
       var segs = await mdWhisper(blob, md.file ? md.file.name : md.url);
       mdSaveCache(src, segs);
       if (gen === md.gen) { mdShow(segs); mdStatus("Altyazı hazır."); }
     } catch (e) {
-      if (gen === md.gen) { mdStatus(""); mdMsg(e && e.msg ? e.msg : "Altyazı oluşturulamadı.", "err"); }
+      if (gen === md.gen) { mdStatus(""); mdMsg(e && e.msg ? e.msg : "Altyazı oluşturulamadı.", "err"); btn.hidden = false; }
     } finally { md.busy = false; btn.disabled = false; btn.textContent = "Altyazı oluştur (Whisper)"; }
+  }
+  async function mdSubs(o) {
+    md.sub = o;
+    var hit = mdCache[md.src], gen = md.gen;
+    if (hit) { mdShow(hit.segs); mdStatus("Altyazı önbellekten yüklendi."); return; }
+    if (o && o.transcript) {
+      mdStatus("Hazır altyazı alınıyor…");
+      var cues = await mdFetchCues(o.transcript);
+      if (gen !== md.gen) return;
+      if (cues) { mdSaveCache(md.src, cues); mdShow(cues); mdStatus("Altyazı hazır."); return; }
+    }
+    if (mdKey()) mdRunWhisper();
+    else {
+      $("mdTranscribe").hidden = false; mdStatus("");
+      mdMsg("Otomatik altyazı için aşağıdaki kutuya OpenAI API anahtarını gir; altyazı kendiliğinden gelir.", "warn");
+    }
+  }
+  function mdPlayAudio(o) {
+    md.kind = o.kind || "audio"; md.url = o.url; md.file = null; md.src = "ep:" + o.url;
+    mdMountMedia(o.url);
+    mdMediaSession(o);
+    mdStatus(o.title ? "Bölüm: " + o.title : "");
+    mdSubs(o);
+  }
+  function mdPlayFile(file) {
+    md.kind = /^video\//.test(file.type) ? "video" : "audio";
+    md.file = file; md.url = ""; md.src = "file:" + file.name + ":" + file.size;
+    md.obj = URL.createObjectURL(file);
+    mdMountMedia(md.obj);
+    mdMediaSession({ title: file.name, show: "Kendi dosyam" });
+    mdSubs({});
+  }
+
+  function pcChips() {
+    var s = pcCurrent(), chips = $("pcChips");
+    chips.replaceChildren.apply(chips, pcSources().map(function (x) {
+      return h("button", { class: "wchip", type: "button", "aria-pressed": !pcFile && x.id === s.id ? "true" : "false", onclick: function () { pc.sel = x.id; pcFile = false; pcShown = null; pcSave(); pcRender(); } }, x.name);
+    }));
+  }
+  async function pcLoad(s) {
+    mdStop();
+    var gen = md.gen;
+    if (s.kind === "ytlist") mdMountYt({ list: s.ref });
+    else if (s.kind === "ytvideo") mdMountYt({ video: s.ref });
+    else if (s.kind === "audio") mdPlayAudio({ url: s.url, title: s.name, show: s.name, kind: /\.(mp4|webm|m4v|mov|ogv)(?:[?#]|$)/i.test(s.url) ? "video" : "audio" });
+    else if (s.kind === "rss") {
+      mdStatus("Son bölüm alınıyor…");
+      try {
+        var ep = await rssLatest(s.url);
+        if (gen !== md.gen) return;
+        if (s.custom && /^Özel/.test(s.name) && ep.show) { s.name = ep.show; pcSave(); pcChips(); }
+        mdPlayAudio({ url: ep.url, title: ep.title, show: ep.show || s.name, art: ep.art, transcript: ep.transcript });
+      } catch (e) {
+        if (gen === md.gen) { mdStatus(""); mdMsg("Podcast akışı okunamadı. Başka bir kaynak seç ya da bölümün mp3 linkini yapıştır.", "err"); }
+      }
+    }
+  }
+  function pcRender() {
+    var s = pcCurrent();
+    pcChips();
+    var key = s.id + ":" + (s.ref || s.url || "");
+    if (!pcFile && pcShown !== key) { pcShown = key; pcLoad(s); }
+    $("pcOpen").hidden = pcFile;
+    if (!pcFile && s.open && s.kind !== "ytlist") $("pcOpen").href = s.open;
+    else if (!pcFile && s.open && !md.ytId) $("pcOpen").href = s.open;
+    $("pcDel").hidden = !s.custom || pcFile;
+    var done = pc.done.indexOf(dayKey()) >= 0, st = pcStreak();
+    $("pcDone").textContent = done ? "Bugün izlendi ✓" : "Bugün izledim";
+    $("pcDone").className = "btn small " + (done ? "ghost" : "primary");
+    $("pcStreak").textContent = st ? st + " gün üst üste" : "Bugün ilk gün olsun";
+  }
+  $("pcDone").addEventListener("click", function () {
+    var k = dayKey(), i = pc.done.indexOf(k);
+    if (i >= 0) pc.done.splice(i, 1); else pc.done.push(k);
+    pc.done = pc.done.slice(-400);
+    pcSave(); pcRender();
   });
+  $("pcDel").addEventListener("click", function () {
+    var cur = pcCurrent();
+    pc.custom = pc.custom.filter(function (x) { return x.id !== cur.id; });
+    pc.sel = "bbc"; pcShown = null; pcSave(); pcRender();
+  });
+  function pcAdd() {
+    var p = pcParse($("pcUrl").value), err = $("pcErr");
+    if (!p) {
+      err.textContent = "Link anlaşılamadı. YouTube video/liste linki, mp3 linki ya da podcast RSS linki yapıştır (@kanal adı çalışmaz).";
+      err.hidden = false; return;
+    }
+    err.hidden = true;
+    p.id = "c" + Date.now().toString(36); p.custom = true;
+    pc.custom.push(p); pc.sel = p.id; pcFile = false; pcShown = null; pcSave();
+    $("pcUrl").value = ""; pcRender();
+  }
+  $("pcAdd").addEventListener("click", pcAdd);
+  $("pcUrl").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); pcAdd(); } });
+  $("mdPick").addEventListener("click", function () { $("mdFile").click(); });
+  $("mdFile").addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    this.value = "";
+    if (!f) return;
+    mdStop(); pcFile = true; pcShown = null;
+    mdPlayFile(f); pcRender();
+  });
+  $("mdTranscribe").addEventListener("click", mdRunWhisper);
 
   /* ---------- shell ---------- */
   function updateHeader() {
