@@ -196,6 +196,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .mdmsg.ok { color: var(--good); border-color: var(--good); }
 .mdmsg.warn { color: var(--warn); border-color: var(--warn); }
 .mdmsg.err { color: var(--bad); border-color: var(--bad); }
+.trlab { margin-top: 16px; }
+.trm { color: var(--good); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -681,6 +683,53 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     return box;
   }
 
+  /* ---------- Türkçe çeviri (kelime + tanım) ---------- */
+  var POS_TR = { noun: "isim", verb: "fiil", adjective: "sıfat", adverb: "zarf", preposition: "edat", conjunction: "bağlaç", pronoun: "zamir", exclamation: "ünlem", interjection: "ünlem", determiner: "belirteç", article: "tanımlık" };
+  var trBusy = {}, trFail = {};
+  async function myMemory(text) {
+    if (!text) return "";
+    var t = await fetchText("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=en|tr", 8000);
+    try {
+      var j = JSON.parse(t), x = j && j.responseData && j.responseData.translatedText;
+      if (x && Number(j.responseStatus) === 200 && !/MYMEMORY WARNING|QUERY LENGTH/i.test(x)) return String(x).trim();
+    } catch (e) {}
+    return "";
+  }
+  async function translate(word, def) {
+    var m = /^\((\w+)\)\s*([\s\S]*)$/.exec(def || ""), pos = m ? m[1].toLowerCase() : "", body = m ? m[2] : (def || "");
+    var posTr = POS_TR[pos] ? "(" + POS_TR[pos] + ") " : "";
+    var prompt = "Translate for a Turkish learner of English.\nEnglish word: \"" + word + "\"\nEnglish definition: \"" + body + "\"\n" +
+      "Reply with only JSON: {\"word\": \"1 to 3 short Turkish equivalents of the word in the sense of the definition, comma separated\", \"definition\": \"natural Turkish translation of the definition\"}";
+    var j = null;
+    if (sampleState === "ok") {
+      try { j = await sample.json(prompt, { modelTier: "quick", cache: false }); }
+      catch (e) { if (e && GONE.indexOf(e.code) >= 0) sampleState = "off"; }
+    }
+    if (!j && mdKey()) { try { j = await mdOpenAI(prompt); } catch (e) { j = null; } }
+    if (j && typeof j.word === "string" && j.word.trim()) {
+      var d = typeof j.definition === "string" ? j.definition.trim() : "";
+      return { word: j.word.trim(), def: d ? posTr + d : "" };
+    }
+    var w = await myMemory(word);
+    if (!w) return null;
+    var dd = await myMemory(body);
+    return { word: w.charAt(0).toLowerCase() + w.slice(1), def: dd ? posTr + dd : "" };
+  }
+  async function fillTr(id) {
+    var c = cards.find(function (x) { return x.id === id; });
+    if (!c || c.tr) return;
+    var key = id + "|" + c.meaning;
+    if (trBusy[id] || trFail[key]) return;
+    trBusy[id] = 1;
+    try {
+      var r = await translate(c.word, c.meaning);
+      var cur = cards.find(function (x) { return x.id === id; });
+      if (r && cur && cur.meaning === c.meaning) saveCard(Object.assign({}, cur, { tr: r.word, trDef: r.def }));
+      else trFail[key] = 1;
+    } catch (e) { trFail[key] = 1; }
+    finally { delete trBusy[id]; }
+  }
+
   /* ---------- Kelime arama (öneri listesi) ---------- */
   function bindSearch(inp, box, pick) {
     function render() {
@@ -695,7 +744,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       if (!m.length) { box.append(h("div", { class: "empty muted" }, "Eşleşen kelime yok.")); return; }
       m.forEach(function (c) {
         box.append(h("button", { class: "rs", type: "button", onclick: function () { inp.value = ""; render(); pick(c); } },
-          h("b", {}, c.word), h("span", {}, c.meaning)));
+          h("b", {}, c.word), h("span", {}, (c.tr ? c.tr + " · " : "") + c.meaning)));
       });
     }
     inp.addEventListener("input", render);
@@ -755,8 +804,10 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       h("div", { class: "wordrow" }, h("h2", { class: "word" }, c.word), pronButtons(c.word)),
       ipaEl,
       sentenceEl(c.sentence, c.used),
-      revealed ? h("div", { class: "back" }, h("div", { class: "label" }, "Tanım"), h("p", { class: "meaning" }, c.meaning)) : null);
+      revealed ? h("div", { class: "back" }, h("div", { class: "label" }, "Tanım"), h("p", { class: "meaning" }, c.meaning),
+        h("div", { class: "label trlab" }, "Türkçe"), h("p", { class: "meaning trm" }, c.tr || "Çeviri hazırlanıyor…"), c.trDef ? h("p", { class: "note" }, c.trDef) : null) : null);
     root.append(card);
+    if (!c.tr) fillTr(c.id);
     getPron(c.word).then(function (p) { if (p.ipa && ipaEl.isConnected) ipaEl.textContent = p.ipa; });
     if (!revealed) {
       root.append(h("button", { class: "btn primary block", type: "button", onclick: function () { revealed = true; updateStudy(); } }, "Tanımı göster"));
@@ -790,6 +841,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     var c = { id: newId(), word: w, sentence: r.sentence, used: r.used || w, meaning: r.definition, created: now, due: now, interval: 0, ease: 2.5, reps: 0, lapses: 0, reviews: 0 };
     lastId = c.id;
     saveCard(c);
+    fillTr(c.id);
   }
   async function onAdd() {
     var w = wordIn.value.trim();
@@ -836,7 +888,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     btn.disabled = true; btn.textContent = "Hazırlanıyor…";
     try {
       var r = await generate(c.word, c.sentence);
-      saveCard(Object.assign({}, c, { sentence: r.sentence, used: r.used, meaning: r.definition }));
+      saveCard(Object.assign({}, c, { sentence: r.sentence, used: r.used, meaning: r.definition, tr: "", trDef: "" }));
+      fillTr(c.id);
       toast("Yeni cümle hazır");
     } catch (e) {
       if (e && GONE.indexOf(e.code) >= 0) { sampleState = "off"; updateAdd(); } else toast(genError(e));
@@ -856,6 +909,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       h("h2", { class: "word" }, c.word),
       sentenceEl(c.sentence, c.used),
       h("p", { class: "defn" }, c.meaning),
+      c.tr ? h("p", { class: "defn trm" }, "TR: " + c.tr + (c.trDef ? " — " + c.trDef : "")) : null,
       h("div", { class: "row" }, regen,
         h("button", { class: "btn ghost small danger", type: "button", onclick: function () { removeCard(c.id); } }, "Geri al"))));
   }
@@ -870,11 +924,11 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   function itemEl(c) {
     var now = Date.now();
     var d = h("details", { class: "item", open: openIds.has(c.id) });
-    d.addEventListener("toggle", function () { if (d.open) openIds.add(c.id); else openIds.delete(c.id); });
+    d.addEventListener("toggle", function () { if (d.open) { openIds.add(c.id); if (!c.tr) fillTr(c.id); } else openIds.delete(c.id); });
     var chip = !c.reviews ? h("span", { class: "chip new" }, "Yeni")
       : c.due <= now ? h("span", { class: "chip due" }, "Bekliyor")
       : h("span", { class: "chip" }, fmt(c.due - now));
-    d.append(h("summary", {}, h("div", { class: "sum" }, h("b", {}, c.word), h("span", { class: "muted ell" }, c.meaning)), chip));
+    d.append(h("summary", {}, h("div", { class: "sum" }, h("b", {}, c.word), h("span", { class: "muted ell" }, (c.tr ? c.tr + " · " : "") + c.meaning)), chip));
 
     var regen = h("button", { class: "btn ghost small", type: "button", hidden: sampleState !== "ok" }, "Başka cümle");
     regen.addEventListener("click", function () { regenCard(c, regen); });
@@ -892,6 +946,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     d.append(h("div", { class: "detail" },
       sentenceEl(c.sentence, c.used),
       h("p", { class: "defn" }, c.meaning),
+      c.tr ? h("p", { class: "defn trm" }, c.tr + (c.trDef ? " — " + c.trDef : "")) : null,
       h("p", { class: "note" }, info),
       h("div", { class: "row" }, regen, del)));
     return d;
@@ -899,7 +954,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   function updateList() {
     var root = $("list"), qv = $("search").value.trim().toLowerCase();
     var items = cards.filter(function (c) {
-      return !qv || c.word.toLowerCase().indexOf(qv) >= 0 || c.meaning.toLowerCase().indexOf(qv) >= 0;
+      return !qv || c.word.toLowerCase().indexOf(qv) >= 0 || c.meaning.toLowerCase().indexOf(qv) >= 0 || (c.tr || "").toLowerCase().indexOf(qv) >= 0;
     }).sort(function (a, b) { return a.word.localeCompare(b.word, "en", { sensitivity: "base" }); });
     var note = cards.length ? cards.length + " kelime" : "";
     if (mode === "local") note += (note ? " · " : "") + "Kartlar yalnızca bu tarayıcıda saklanıyor.";
