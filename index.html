@@ -326,6 +326,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
           <p class="note err" id="pcErr" hidden></p>
           <input id="mdFile" type="file" accept="audio/*,video/*" hidden>
           <button class="btn ghost small" id="mdPick" type="button">veya dosya seç</button>
+          <input id="mdSubFile" type="file" accept=".vtt,.srt,text/vtt,application/x-subrip" hidden>
+          <button class="btn ghost small" id="mdSubPick" type="button">altyazı dosyası (.vtt / .srt) yükle</button>
         </div>
       </div>
       <div class="card form">
@@ -1104,6 +1106,18 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   if (!Array.isArray(pc.custom)) pc.custom = [];
   if (!Array.isArray(pc.done)) pc.done = [];
   pc.custom.forEach(function (x) { if (!x.kind) x.kind = x.type === "video" ? "ytvideo" : "ytlist"; });
+  (function () {
+    var seen = {};
+    pc.custom = pc.custom.filter(function (x) { var k = x.kind + "|" + (x.ref || x.url); if (seen[k]) return false; seen[k] = 1; return true; });
+  })();
+  async function pcTitle(p) {
+    var t = await fetchText("https://noembed.com/embed?url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + p.ref), 8000);
+    try {
+      var j = JSON.parse(t);
+      if (j && j.title) { p.name = j.title.length > 28 ? j.title.slice(0, 27) + "…" : j.title; pcSave(); pcChips(); }
+    } catch (e) {}
+  }
+  pc.custom.forEach(function (x) { if (x.kind === "ytvideo" && x.name === "Özel video") pcTitle(x); });
 
   function pcSave() { try { localStorage.setItem(LSP, JSON.stringify(pc)); } catch (e) {} }
   function pcSources() { return PC_DEFAULT.concat(pc.custom); }
@@ -1280,14 +1294,26 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
 
   async function mdYtCaptions(id) {
-    var html = "", i, t;
-    for (i = 0; i < PROXIES.length && !html; i++) {
-      t = await fetchText(PROXIES[i]("https://www.youtube.com/watch?v=" + id), 9000);
-      if (t.indexOf("captionTracks") >= 0) html = t;
+    var html = "", i, t, tracks = null, ctl = new AbortController(), tmo = setTimeout(function () { ctl.abort(); }, 10000);
+    try {
+      var rr = await fetch(PROXIES[0]("https://www.youtube.com/youtubei/v1/player?prettyPrint=false"), {
+        method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context: { client: { clientName: "ANDROID", clientVersion: "20.10.38", hl: "en" } }, videoId: id })
+      });
+      if (rr.ok) {
+        var jj = await rr.json();
+        tracks = jj && jj.captions && jj.captions.playerCaptionsTracklistRenderer && jj.captions.playerCaptionsTracklistRenderer.captionTracks;
+      }
+    } catch (e) { tracks = null; } finally { clearTimeout(tmo); }
+    if (!tracks || !tracks.length) {
+      for (i = 0; i < PROXIES.length && !html; i++) {
+        t = await fetchText(PROXIES[i]("https://www.youtube.com/watch?v=" + id), 9000);
+        if (t.indexOf("captionTracks") >= 0) html = t;
+      }
+      var m = /"captionTracks":(\[.*?\])/.exec(html);
+      if (!m) throw new Error("no tracks");
+      tracks = JSON.parse(m[1]);
     }
-    var m = /"captionTracks":(\[.*?\])/.exec(html);
-    if (!m) throw new Error("no tracks");
-    var tracks = JSON.parse(m[1]);
     var en = tracks.filter(function (x) { return /^en/i.test(x.languageCode || ""); });
     var tr = en.find(function (x) { return x.kind !== "asr"; }) || en[0] || tracks[0];
     if (!tr || !tr.baseUrl) throw new Error("no track");
@@ -1318,7 +1344,8 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     } catch (e) {
       if (gen !== md.gen || md.ytId !== id) return;
       mdStatus("");
-      mdMsg("Bu videonun altyazısı alınamadı. Altyazı ve ekran kapalıyken çalma için “BBC 6 Minute English” gibi bir ses kaynağı seç, ya da sesi mp3 olarak indirip “dosya seç” ile yükle.", "warn");
+      try { if (md.yt && md.yt.loadModule) { md.yt.loadModule("captions"); md.yt.setOption("captions", "track", { languageCode: "en" }); } } catch (e2) {}
+      mdMsg("Kelimeye dokunmalı altyazı bu videoda alınamadı (YouTube dış erişimi engelliyor); YouTube'un kendi altyazısı açıldı. Dokunmalı altyazı için “BBC 6 Minute English” gibi bir ses kaynağı seç ya da aşağıdan altyazı dosyası (.vtt / .srt) yükle.", "warn");
     }
   }
   function mdShow(segs) {
@@ -1573,9 +1600,12 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       err.hidden = false; return;
     }
     err.hidden = true;
+    var same = pcSources().find(function (x) { return x.kind === p.kind && (x.ref || x.url) === (p.ref || p.url); });
+    if (same) { pc.sel = same.id; pcFile = false; pcShown = null; pcSave(); $("pcUrl").value = ""; pcRender(); return; }
     p.id = "c" + Date.now().toString(36); p.custom = true;
     pc.custom.push(p); pc.sel = p.id; pcFile = false; pcShown = null; pcSave();
     $("pcUrl").value = ""; pcRender();
+    if (p.kind === "ytvideo") pcTitle(p);
   }
   $("pcAdd").addEventListener("click", pcAdd);
   $("pcUrl").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); pcAdd(); } });
@@ -1588,6 +1618,16 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     mdPlayFile(f); pcRender();
   });
   $("mdTranscribe").addEventListener("click", mdRunWhisper);
+  $("mdSubPick").addEventListener("click", function () { $("mdSubFile").click(); });
+  $("mdSubFile").addEventListener("change", async function () {
+    var f = this.files && this.files[0];
+    this.value = "";
+    if (!f) return;
+    var segs = parseCues(await f.text());
+    if (!segs.length) { mdMsg("Altyazı dosyası okunamadı (.vtt veya .srt olmalı).", "err"); return; }
+    if (md.src) mdSaveCache(md.src, segs);
+    mdMsg(""); mdShow(segs); mdStatus("Altyazı dosyası yüklendi.");
+  });
 
   /* ---------- shell ---------- */
   function updateHeader() {
