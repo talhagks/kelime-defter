@@ -198,6 +198,11 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .mdmsg.err { color: var(--bad); border-color: var(--bad); }
 .trlab { margin-top: 16px; }
 .trm { color: var(--good); }
+.bigtime { margin: 0; font: 700 34px/1.1 var(--font-display); letter-spacing: -.02em; }
+.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 88px; }
+.bar { display: grid; gap: 4px; justify-items: center; align-content: end; height: 100%; }
+.bar i { display: block; width: 100%; border-radius: 6px; background: var(--accent); }
+.bar span { font-size: 11px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -246,6 +251,32 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         <div id="sResults" class="results" hidden></div>
       </div>
       <div id="studyBody"></div>
+      <div class="card form" id="statsCard">
+        <div class="field">
+          <span class="label">Bugün sitede geçen süre</span>
+          <p class="bigtime" id="stToday">0 sn</p>
+          <div class="bars" id="stBars" role="img" aria-label="Son 7 günün süreleri"></div>
+          <p class="note" id="stWeek"></p>
+        </div>
+        <div class="field">
+          <span class="label">Cihazlar arası eşitleme</span>
+          <p class="note" id="syncState"></p>
+          <input id="ghToken" type="password" placeholder="GitHub token (gist izni)" autocapitalize="none" autocomplete="off" spellcheck="false">
+          <div class="pcbar">
+            <button class="btn small primary" id="syncBtn" type="button">Eşitlemeyi aç</button>
+            <button class="btn ghost small danger" id="syncOff" type="button" hidden>Kapat</button>
+          </div>
+          <p class="note">Kelimelerin, grammar notların ve sürelerin cihazlar arasında aynı olması için: <a class="out" href="https://github.com/settings/tokens/new?scopes=gist&amp;description=kelime-defteri" target="_blank" rel="noopener noreferrer">gist izinli token oluştur</a>, önce verilerin olduğu cihazda (bilgisayar) yapıştırıp “Eşitlemeyi aç”a bas, sonra aynı token'ı telefonda gir. Token yalnızca bu tarayıcıda saklanır.</p>
+        </div>
+        <div class="field">
+          <span class="label">Yedek</span>
+          <div class="pcbar">
+            <button class="btn ghost small" id="bkExport" type="button">Yedeği indir</button>
+            <button class="btn ghost small" id="bkPick" type="button">Yedeği yükle</button>
+            <input id="bkFile" type="file" accept=".json,application/json" hidden>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="v-ekle" class="view" aria-label="Yeni kelime" hidden>
@@ -434,7 +465,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
 
   /* ---------- storage ---------- */
-  function persistLocal() { try { localStorage.setItem(LS, JSON.stringify(cards)); } catch (e) {} }
+  function persistLocal() { try { localStorage.setItem(LS, JSON.stringify(cards)); } catch (e) {} syncSoon(); }
   function put(c) {
     var i = cards.findIndex(function (x) { return x.id === c.id; });
     if (i < 0) cards.push(c); else cards[i] = c;
@@ -445,12 +476,14 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     });
   }
   function saveCard(c) {
+    c.u = Date.now();
     put(c);
     if (mode === "db") queueWrite(c.id, function () { return col.doc(c.id).set(c); });
     else persistLocal();
     refreshAll();
   }
   function removeCard(id) {
+    tomb.cards[id] = Date.now(); tombSave();
     cards = cards.filter(function (c) { return c.id !== id; });
     learning.delete(id); openIds.delete(id);
     if (mode === "db") queueWrite(id, function () { return col.doc(id).delete(); });
@@ -948,7 +981,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       return !qv || c.word.toLowerCase().indexOf(qv) >= 0 || c.meaning.toLowerCase().indexOf(qv) >= 0 || (c.tr || "").toLowerCase().indexOf(qv) >= 0;
     }).sort(function (a, b) { return a.word.localeCompare(b.word, "en", { sensitivity: "base" }); });
     var note = cards.length ? cards.length + " kelime" : "";
-    if (mode === "local") note += (note ? " · " : "") + "Kartlar yalnızca bu tarayıcıda saklanıyor.";
+    if (mode === "local") note += (note ? " · " : "") + (syncOn() ? "Kartlar cihazlar arasında eşitleniyor." : "Kartlar yalnızca bu tarayıcıda saklanıyor (Çalış sekmesinin altından eşitlemeyi aç).");
     $("listnote").textContent = note;
     root.hidden = !items.length && !cards.length;
     root.replaceChildren.apply(root, items.length ? items.map(itemEl)
@@ -1026,7 +1059,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   if (!Array.isArray(gNotes)) gNotes = [];
   var gTitle = $("gTitle"), gBody = $("gBody"), gSave = $("gSave"), gCancel = $("gCancel");
 
-  function gPersist() { try { localStorage.setItem(LSG, JSON.stringify(gNotes)); } catch (e) { toast("Not kaydedilemedi."); } }
+  function gPersist() { try { localStorage.setItem(LSG, JSON.stringify(gNotes)); } catch (e) { toast("Not kaydedilemedi."); } syncSoon(); }
   function gUpdateBtn() {
     gSave.disabled = !(gTitle.value.trim() && gBody.value.trim());
     gSave.textContent = gEditId ? "Güncelle" : "Kaydet";
@@ -1064,6 +1097,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
         tm = setTimeout(function () { armed = false; del.textContent = "Sil"; }, 3500);
       } else {
         clearTimeout(tm);
+        tomb.grammar[n.id] = Date.now(); tombSave();
         gNotes = gNotes.filter(function (x) { return x.id !== n.id; });
         gOpen.delete(n.id);
         if (gEditId === n.id) gReset();
@@ -1079,7 +1113,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
       return !qv || n.title.toLowerCase().indexOf(qv) >= 0 || n.body.toLowerCase().indexOf(qv) >= 0;
     }).sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
     $("gNote").textContent = gNotes.length
-      ? gNotes.length + " not · Notlar yalnızca bu tarayıcıda saklanıyor."
+      ? gNotes.length + " not · " + (syncOn() ? "Notlar cihazlar arasında eşitleniyor." : "Notlar yalnızca bu tarayıcıda saklanıyor (Çalış sekmesinin altından eşitlemeyi aç).")
       : "Henüz notun yok. Yukarıya ilk grammar notunu yaz.";
     root.hidden = !gNotes.length;
     root.replaceChildren.apply(root, items.length ? items.map(gItem)
@@ -1119,7 +1153,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   }
   pc.custom.forEach(function (x) { if (x.kind === "ytvideo" && x.name === "Özel video") pcTitle(x); });
 
-  function pcSave() { try { localStorage.setItem(LSP, JSON.stringify(pc)); } catch (e) {} }
+  function pcSave() { try { localStorage.setItem(LSP, JSON.stringify(pc)); } catch (e) {} syncSoon(); }
   function pcSources() { return PC_DEFAULT.concat(pc.custom); }
   function pcCurrent() {
     var all = pcSources();
@@ -1629,11 +1663,242 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     mdMsg(""); mdShow(segs); mdStatus("Altyazı dosyası yüklendi.");
   });
 
+  /* ---------- Süre takibi + cihazlar arası eşitleme ---------- */
+  var LST = "kelime-defteri-time-v1", LSD = "kelime-defteri-del-v1", LSTK = "kelime-defteri-gh-token", LSGI = "kelime-defteri-gist";
+  var GH = "https://api.github.com", GFILE = "kelime-defteri.json", GDESC = "kelime-defteri-sync";
+  var tstats = { dev: "", days: {} }, tomb = { cards: {}, grammar: {} };
+  var syncBusy = false, syncQueued = false, syncApplying = false, syncT = 0, lastSync = 0;
+  try { var t0 = JSON.parse(localStorage.getItem(LST) || "{}"); if (t0 && typeof t0 === "object") { tstats.dev = t0.dev || ""; tstats.days = t0.days || {}; } } catch (e) {}
+  if (!tstats.dev) tstats.dev = newId();
+  try { var d0 = JSON.parse(localStorage.getItem(LSD) || "{}"); if (d0 && typeof d0 === "object") { tomb.cards = d0.cards || {}; tomb.grammar = d0.grammar || {}; } } catch (e) {}
+
+  function timeSave() {
+    var keys = Object.keys(tstats.days).sort();
+    keys.slice(0, Math.max(0, keys.length - 120)).forEach(function (k) { delete tstats.days[k]; });
+    try { localStorage.setItem(LST, JSON.stringify(tstats)); } catch (e) {}
+  }
+  function tombWrite() { try { localStorage.setItem(LSD, JSON.stringify(tomb)); } catch (e) {} }
+  function tombSave() { tombWrite(); syncSoon(); }
+  function dayTotal(k) { var o = tstats.days[k] || {}, s = 0; Object.keys(o).forEach(function (d) { s += o[d]; }); return s; }
+  function fmtDur(s) {
+    s = Math.round(s);
+    if (s < 60) return s + " sn";
+    var m = Math.round(s / 60);
+    return m < 60 ? m + " dk" : Math.floor(m / 60) + " sa " + (m % 60) + " dk";
+  }
+  function statsRender() {
+    var today = dayKey(), days = [], max = 1, sum = 0;
+    $("stToday").textContent = fmtDur(dayTotal(today));
+    for (var i = 6; i >= 0; i--) {
+      var x = new Date(); x.setDate(x.getDate() - i);
+      var k = dayKey(x), v = dayTotal(k);
+      days.push({ k: k, v: v, w: ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"][x.getDay()] });
+      max = Math.max(max, v); sum += v;
+    }
+    var bars = $("stBars");
+    bars.replaceChildren.apply(bars, days.map(function (o) {
+      var bar = h("i", { title: fmtDur(o.v) });
+      bar.style.height = Math.max(3, Math.round(o.v / max * 60)) + "px";
+      if (o.k !== today) bar.style.opacity = ".55";
+      return h("div", { class: "bar" }, bar, h("span", {}, o.w));
+    }));
+    $("stWeek").textContent = "Son 7 gün: " + fmtDur(sum) + " · günlük ortalama " + fmtDur(sum / 7);
+    updateHeader();
+  }
+  var lastTick = Date.now(), lastAct = Date.now(), dirtySec = 0, tickN = 0;
+  ["pointerdown", "keydown", "scroll", "touchstart", "click"].forEach(function (ev) {
+    window.addEventListener(ev, function () { lastAct = Date.now(); }, { passive: true, capture: true });
+  });
+  function mediaPlaying() {
+    try {
+      if (md.el && !md.el.paused && !md.el.ended) return true;
+      return !!(md.yt && md.yt.getPlayerState && md.yt.getPlayerState() === 1);
+    } catch (e) { return false; }
+  }
+  setInterval(function () {
+    var now = Date.now(), d = Math.min(5, (now - lastTick) / 1000);
+    lastTick = now;
+    var active = (document.visibilityState === "visible" && now - lastAct < 120000) || mediaPlaying();
+    if (!active || d <= 0) return;
+    var k = dayKey(), day = tstats.days[k] || (tstats.days[k] = {});
+    day[tstats.dev] = (day[tstats.dev] || 0) + d; dirtySec += d; tickN++;
+    if (dirtySec >= 15) { dirtySec = 0; timeSave(); }
+    if (tickN % 10 === 0) statsRender();
+  }, 1000);
+
+  function ghToken() { try { return localStorage.getItem(LSTK) || ""; } catch (e) { return ""; } }
+  function syncOn() { return !!ghToken(); }
+  function setSync(t, bad) { var e = $("syncState"); e.textContent = t; e.className = "note" + (bad ? " err" : ""); }
+  function syncUi() {
+    var on = syncOn();
+    $("syncBtn").textContent = on ? "Şimdi eşitle" : "Eşitlemeyi aç";
+    $("syncOff").hidden = !on;
+    $("ghToken").placeholder = on ? "Token kayıtlı (değiştirmek için yenisini yaz)" : "GitHub token (gist izni)";
+    if (!on) setSync("Eşitleme kapalı: veriler yalnızca bu cihazda duruyor.");
+  }
+  function ghHead() { return { "Authorization": "Bearer " + ghToken(), "Accept": "application/vnd.github+json", "Content-Type": "application/json" }; }
+  async function ghFetch(path, opt) {
+    var r;
+    try { r = await fetch(GH + path, Object.assign({ headers: ghHead() }, opt || {})); }
+    catch (e) { throw { msg: "Eşitlenemedi: bağlantı yok." }; }
+    if (r.status === 401 || r.status === 403) throw { msg: "Token geçersiz ya da “gist” izni yok." };
+    return r;
+  }
+  async function ghFind() {
+    var best = null;
+    for (var p = 1; p <= 3; p++) {
+      var r = await ghFetch("/gists?per_page=100&page=" + p);
+      if (!r.ok) throw { msg: "Eşitleme hatası (" + r.status + ")." };
+      var l = await r.json();
+      l.forEach(function (g) { if (g.description === GDESC && g.files && g.files[GFILE] && (!best || g.created_at < best.created_at)) best = g; });
+      if (l.length < 100) break;
+    }
+    return best ? best.id : "";
+  }
+  async function ghRead(id) {
+    var r = await ghFetch("/gists/" + id);
+    if (r.status === 404) return null;
+    if (!r.ok) throw { msg: "Eşitleme hatası (" + r.status + ")." };
+    var j = await r.json(), f = j.files && j.files[GFILE];
+    if (!f) return null;
+    var txt = f.content;
+    if (f.truncated && f.raw_url) { try { txt = await (await fetch(f.raw_url)).text(); } catch (e) { throw { msg: "Eşitlenemedi: bağlantı yok." }; } }
+    try { return JSON.parse(txt); } catch (e) { return null; }
+  }
+  async function ghPut(id, data) {
+    var files = {}; files[GFILE] = { content: JSON.stringify(data) };
+    var r = id ? await ghFetch("/gists/" + id, { method: "PATCH", body: JSON.stringify({ files: files }) })
+               : await ghFetch("/gists", { method: "POST", body: JSON.stringify({ description: GDESC, public: false, files: files }) });
+    if (!r.ok) throw { msg: "Eşitleme hatası (" + r.status + ")." };
+    return (await r.json()).id;
+  }
+
+  function stable(o) {
+    if (Array.isArray(o)) return "[" + o.map(stable).join(",") + "]";
+    if (o && typeof o === "object") return "{" + Object.keys(o).filter(function (k) { return o[k] !== undefined; }).sort().map(function (k) { return JSON.stringify(k) + ":" + stable(o[k]); }).join(",") + "}";
+    return JSON.stringify(o);
+  }
+  function byId(a) { return (a || []).slice().sort(function (x, y) { return x.id < y.id ? -1 : x.id > y.id ? 1 : 0; }); }
+  function canon(d) {
+    d = d || {};
+    return stable({ cards: byId(d.cards), cardDel: d.cardDel || {}, grammar: byId(d.grammar), gDel: d.gDel || {}, time: d.time || {}, done: (d.done || []).slice().sort() });
+  }
+  function cardStamp(c) { return c.u || 0; }
+  function noteStamp(n) { return n.updated || n.created || 0; }
+  function cardNewer(x, cur) { var a = cardStamp(x), b = cardStamp(cur); return a > b || (a === b && (x.reviews || 0) >= (cur.reviews || 0)); }
+  function noteNewer(x, cur) { return noteStamp(x) >= noteStamp(cur); }
+  function mergeList(a, b, delA, delB, stamp, newer) {
+    var del = Object.assign({}, delB || {}), now = Date.now(), map = {};
+    Object.keys(delA || {}).forEach(function (k) { del[k] = Math.max(del[k] || 0, delA[k]); });
+    Object.keys(del).forEach(function (k) { if (now - del[k] > 180 * DAY) delete del[k]; });
+    (b || []).concat(a || []).forEach(function (x) { var cur = map[x.id]; if (!cur || newer(x, cur)) map[x.id] = x; });
+    var list = Object.keys(map).map(function (k) { return map[k]; }).filter(function (x) { return !(del[x.id] && del[x.id] >= stamp(x)); });
+    return { list: list, del: del };
+  }
+  function mergeTime(a, b) {
+    var out = {};
+    [b || {}, a || {}].forEach(function (src) {
+      Object.keys(src).forEach(function (k) {
+        var o = out[k] || (out[k] = {});
+        Object.keys(src[k] || {}).forEach(function (dv) { o[dv] = Math.max(o[dv] || 0, src[k][dv] || 0); });
+      });
+    });
+    return out;
+  }
+  function mergeAll(local, remote) {
+    remote = remote || {};
+    var c = mergeList(local.cards, remote.cards, local.cardDel, remote.cardDel, cardStamp, cardNewer);
+    var g = mergeList(local.grammar, remote.grammar, local.gDel, remote.gDel, noteStamp, noteNewer);
+    var done = {};
+    (local.done || []).concat(remote.done || []).forEach(function (k) { done[k] = 1; });
+    return { v: 1, cards: c.list, cardDel: c.del, grammar: g.list, gDel: g.del, time: mergeTime(local.time, remote.time), done: Object.keys(done).sort() };
+  }
+  function syncSnap() { return { v: 1, cards: mode === "local" ? cards : [], cardDel: tomb.cards, grammar: gNotes, gDel: tomb.grammar, time: tstats.days, done: pc.done }; }
+  function syncApply(m) {
+    var cardsCh = false, notesCh = false;
+    syncApplying = true;
+    try {
+      if (mode === "local" && stable(byId(m.cards)) !== stable(byId(cards))) { cards = m.cards; persistLocal(); cardsCh = true; }
+      if (stable(byId(m.grammar)) !== stable(byId(gNotes))) { gNotes = m.grammar; gPersist(); notesCh = true; }
+      tomb = { cards: m.cardDel || {}, grammar: m.gDel || {} }; tombWrite();
+      tstats.days = m.time || {}; timeSave();
+      pc.done = m.done || []; pcSave();
+    } finally { syncApplying = false; }
+    if (cardsCh) refreshAll();
+    if (notesCh) gRender();
+    if (view === "podcast") pcRender();
+    statsRender();
+  }
+  function syncSoon() {
+    if (!syncOn() || syncApplying) return;
+    clearTimeout(syncT); syncT = setTimeout(function () { syncNow(); }, 4000);
+  }
+  async function syncNow() {
+    if (!syncOn()) return;
+    if (syncBusy) { syncQueued = true; return; }
+    syncBusy = true; setSync("Eşitleniyor…");
+    try {
+      var id = "", remote = null;
+      try { id = localStorage.getItem(LSGI) || ""; } catch (e) {}
+      if (id) { remote = await ghRead(id); if (!remote) id = ""; }
+      if (!id) { id = await ghFind(); if (id) remote = await ghRead(id); }
+      var merged = mergeAll(syncSnap(), remote);
+      syncApply(merged);
+      if (!id || !remote || canon(merged) !== canon(remote)) id = await ghPut(id, merged);
+      try { localStorage.setItem(LSGI, id); } catch (e) {}
+      lastSync = Date.now();
+      setSync("Eşitlendi · " + new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
+    } catch (e) {
+      setSync(e && e.msg ? e.msg : "Eşitlenemedi. Tekrar dene.", true);
+    } finally {
+      syncBusy = false;
+      if (syncQueued) { syncQueued = false; syncSoon(); }
+    }
+  }
+  $("syncBtn").addEventListener("click", function () {
+    var v = $("ghToken").value.trim();
+    if (v) { try { localStorage.setItem(LSTK, v); localStorage.removeItem(LSGI); } catch (e) {} $("ghToken").value = ""; }
+    syncUi();
+    if (!syncOn()) { setSync("Önce GitHub token'ını yapıştır.", true); return; }
+    syncNow();
+  });
+  $("syncOff").addEventListener("click", function () {
+    try { localStorage.removeItem(LSTK); localStorage.removeItem(LSGI); } catch (e) {}
+    syncUi(); updateList(); gRender();
+  });
+  $("bkExport").addEventListener("click", function () {
+    var blob = new Blob([JSON.stringify(syncSnap(), null, 1)], { type: "application/json" });
+    var a = h("a", { href: URL.createObjectURL(blob), download: "kelime-defteri-yedek-" + dayKey() + ".json" });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  });
+  $("bkPick").addEventListener("click", function () { $("bkFile").click(); });
+  $("bkFile").addEventListener("change", async function () {
+    var f = this.files && this.files[0];
+    this.value = "";
+    if (!f) return;
+    try {
+      var j = JSON.parse(await f.text());
+      if (!j || typeof j !== "object" || (!Array.isArray(j.cards) && !Array.isArray(j.grammar))) throw new Error("format");
+      syncApply(mergeAll(syncSnap(), j));
+      toast("Yedek yüklendi"); syncSoon();
+    } catch (e) { toast("Yedek dosyası okunamadı."); }
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") { timeSave(); if (syncOn()) syncNow(); }
+    else if (syncOn() && Date.now() - lastSync > 20000) syncNow();
+  });
+  window.addEventListener("pagehide", timeSave);
+  setInterval(function () { if (document.visibilityState === "visible" && syncOn()) syncNow(); }, 300000);
+
   /* ---------- shell ---------- */
   function updateHeader() {
     var now = Date.now();
     var n = cards.filter(function (c) { return c.due <= now; }).length;
-    $("count").textContent = loaded && cards.length ? n + " bekliyor" : "";
+    var parts = [], tt = dayTotal(dayKey());
+    if (loaded && cards.length) parts.push(n + " bekliyor");
+    if (tt >= 60) parts.push(fmtDur(tt));
+    $("count").textContent = parts.join(" · ");
   }
   function refreshAll() { updateHeader(); updateStudy(); updateList(); updateAdd(); renderResult(); renderStudySearch(); renderTSearch(); mdMark(); }
 
@@ -1645,7 +1910,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
     document.querySelectorAll(".tab").forEach(function (t) {
       if (t.dataset.view === v) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
     });
-    if (v === "calis") updateStudy();
+    if (v === "calis") { updateStudy(); statsRender(); }
     if (v === "kelimeler") updateList();
     if (v === "grammar") gRender();
     if (v === "podcast") pcRender();
@@ -1698,6 +1963,9 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
   gRender();
   initSample();
   initStore();
+  syncUi();
+  statsRender();
+  if (syncOn()) setTimeout(function () { syncNow(); }, 800);
 })();
 </script>
 </body>
